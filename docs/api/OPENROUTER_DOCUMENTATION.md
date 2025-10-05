@@ -1,7 +1,7 @@
 # OpenRouter API Documentation
 
 ## Overview
-OpenRouter provides a unified API to access 400+ AI models from dozens of providers through a single endpoint, with automatic fallbacks and cost optimization.
+OpenRouter provides a unified API to access 16 AI models from dozens of providers through a single endpoint, with automatic fallbacks and cost optimization.
 
 ## Key Features
 - **Unified Interface**: Single API for all models

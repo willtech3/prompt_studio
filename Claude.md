@@ -24,7 +24,7 @@ Prompt Engineering Studio is a modern web application for optimizing and evaluat
 - **Package Manager**: uv (modern Python package management)
 - **Database**: PostgreSQL 16 with SQLAlchemy 2.0
 - **Authentication**: JWT tokens
-- **API Integration**: OpenRouter for 400+ AI models
+- **API Integration**: OpenRouter for 16 AI models
 
 ### Frontend (React 19)
 - **Framework**: React 19 with TypeScript

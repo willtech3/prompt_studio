@@ -1,11 +1,11 @@
 # Prompt Engineering Studio 🚀
 
-A modern, comprehensive platform for optimizing and evaluating AI prompts across 400+ models via OpenRouter's unified API.
+A modern, comprehensive platform for optimizing and evaluating AI prompts across 16 models via OpenRouter's unified API.
 
 ## 🎉 Current Status: MVP Fully Functional
 
 The MVP is complete and operational! You can now:
-- Chat with 400+ AI models in real-time
+- Chat with 16 AI models in real-time
 - Optimize prompts with AI-powered suggestions
 - Save and restore your work with snapshots
 - Access provider-specific best practices
@@ -17,7 +17,7 @@ The MVP is complete and operational! You can now:
 
 Prompt Engineering Studio is a cutting-edge application that combines the latest web technologies to provide a powerful platform for:
 - **Prompt Management**: Create, version, and organize prompts with templates and variables
-- **Multi-Model Access**: Connect to 400+ AI models through OpenRouter's unified API
+- **Multi-Model Access**: Connect to 16 AI models through OpenRouter's unified API
 - **Best Practices Engine**: Get model-specific recommendations and automatic improvements
 - **Evaluation System**: Test and compare prompts with custom metrics and A/B testing
 - **Cost Optimization**: Track token usage and optimize for performance vs. cost
@@ -41,7 +41,7 @@ Prompt Engineering Studio is a cutting-edge application that combines the latest
 - **Zustand** - State management
 
 ### AI Integration
-- **OpenRouter API** - Unified access to 400+ models
+- **OpenRouter API** - Unified access to 16 models
 - Support for OpenAI, Anthropic, Google, Meta, and more
 
 ## 📁 Project Structure
@@ -147,7 +147,7 @@ npm run dev
 ## 🔑 Key Features (Implemented in MVP)
 
 ### ✅ Real-Time AI Chat
-- 🤖 Access to 400+ AI models via OpenRouter
+- 🤖 Access to 16 AI models via OpenRouter
 - ⚡ Server-Sent Events (SSE) streaming for real-time responses
 - 🎛️ Comprehensive parameter controls:
   - Temperature, Top-P, Top-K
@@ -195,7 +195,7 @@ npm run dev
 - ✅ **UI Foundation**: React 19 + TypeScript + Tailwind CSS v4
 - ✅ **Backend API**: FastAPI with async support
 - ✅ **Database**: PostgreSQL 16 with SQLAlchemy 2.0
-- ✅ **OpenRouter Integration**: Real-time streaming, 400+ models
+- ✅ **OpenRouter Integration**: Real-time streaming, 16 models
 - ✅ **Model Catalog**: Dynamic model management and refresh
 - ✅ **Provider Content**: Best practices and optimization guides
 - ✅ **Snapshot System**: Save and restore UI state

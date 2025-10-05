@@ -8,7 +8,7 @@ All three core phases have been successfully implemented:
 - ✅ **Phase 3**: PostgreSQL database, snapshot system, provider content, best practices
 
 **Key Features Implemented:**
-- Real-time AI chat with 400+ models via OpenRouter
+- Real-time AI chat with 16 models via OpenRouter
 - Comprehensive parameter controls (temperature, top-p, top-k, reasoning effort, etc.)
 - Provider-specific best practices and optimization guides
 - Snapshot save/load system for UI state persistence

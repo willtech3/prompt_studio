@@ -2,7 +2,7 @@
 
 ## 1. Executive Summary
 
-Prompt Engineering Studio is a modern, comprehensive platform designed to optimize and evaluate AI prompts across multiple models and providers. The platform leverages OpenRouter's unified API to provide access to 400+ AI models while offering advanced prompt engineering features, best practices, and evaluation capabilities.
+Prompt Engineering Studio is a modern, comprehensive platform designed to optimize and evaluate AI prompts across multiple models and providers. The platform leverages OpenRouter's unified API to provide access to 16 AI models while offering advanced prompt engineering features, best practices, and evaluation capabilities.
 
 ## 2. System Architecture
 
@@ -57,7 +57,7 @@ Prompt Engineering Studio is a modern, comprehensive platform designed to optimi
 - **Tagging System**: Organize prompts with tags and categories
 
 ### 3.2 Model Integration (via OpenRouter)
-- **Model Selection**: Access to 400+ models
+- **Model Selection**: Access to 16 models
 - **Automatic Routing**: Leverage OpenRouter's fallback mechanisms
 - **Cost Optimization**: Track and optimize token usage
 - **Provider Management**: Configure preferred providers
