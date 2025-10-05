@@ -1,0 +1,47 @@
+meta {
+  name: Optimize Prompt
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/optimize
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "model": "openai/gpt-4o",
+    "provider": "openai",
+    "kind": "user",
+    "prompt": "Write a function that sorts a list",
+    "system": "You are a helpful coding assistant"
+  }
+}
+
+docs {
+  # Optimize Prompt
+
+  Optimizes a prompt using AI to improve clarity, structure, and effectiveness.
+
+  ## Request Body
+  ```json
+  {
+    "model": "string (required) - Model ID to use for optimization",
+    "provider": "string (optional) - Provider name (openai, anthropic, google, xai, deepseek)",
+    "kind": "string (required) - Prompt type: 'system' or 'user'",
+    "prompt": "string (required) - The prompt to optimize",
+    "system": "string (optional) - System context"
+  }
+  ```
+
+  ## Response
+  ```json
+  {
+    "optimized": "string - The optimized prompt",
+    "changes": ["array of changes made"],
+    "notes": ["array of optimization notes"]
+  }
+  ```
+}

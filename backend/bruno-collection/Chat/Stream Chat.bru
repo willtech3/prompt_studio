@@ -1,0 +1,48 @@
+meta {
+  name: Stream Chat
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/chat/stream?model=openai/gpt-4o&prompt=Hello, how are you?&temperature=0.7
+  body: none
+  auth: none
+}
+
+params:query {
+  model: openai/gpt-4o
+  prompt: Hello, how are you?
+  temperature: 0.7
+  ~system: You are a helpful assistant
+  ~max_tokens: 1000
+  ~top_p: 1.0
+  ~reasoning_effort: medium
+}
+
+docs {
+  # Stream Chat
+
+  Streams a chat completion response using Server-Sent Events (SSE).
+
+  ## Query Parameters
+  - `model` (required): Model ID to use (e.g., "openai/gpt-4o")
+  - `prompt` (required): User prompt content
+  - `system` (optional): System prompt
+  - `temperature` (optional): Sampling temperature (0-2, default: 0.7)
+  - `max_tokens` (optional): Max tokens for completion
+  - `top_p` (optional): Nucleus sampling (0-1, default: 1.0)
+  - `reasoning_effort` (optional): "low", "medium", or "high"
+  - `top_k` (optional): Top-K sampling
+  - `frequency_penalty` (optional): Frequency penalty
+  - `presence_penalty` (optional): Presence penalty
+  - `repetition_penalty` (optional): Repetition penalty
+  - `min_p` (optional): Minimum probability threshold
+  - `top_a` (optional): Top-A sampling
+  - `seed` (optional): Deterministic seed
+  - `response_format` (optional): "json" or "json_object"
+  - `stop` (optional): Stop sequences (comma or newline-separated)
+  - `logprobs` (optional): Return log probabilities
+  - `top_logprobs` (optional): Number of top tokens in logprobs
+  - `logit_bias` (optional): JSON object mapping token IDs to bias values
+}

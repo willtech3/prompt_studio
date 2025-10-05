@@ -1,0 +1,55 @@
+meta {
+  name: Create Save
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/saves
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "title": "My First Prompt",
+    "kind": "prompt",
+    "provider": "openai",
+    "model": "openai/gpt-4o",
+    "data": {
+      "system_prompt": "You are a helpful assistant",
+      "user_prompt": "Explain quantum computing",
+      "temperature": 0.7,
+      "notes": "Initial version"
+    }
+  }
+}
+
+docs {
+  # Create Save
+
+  Creates a new snapshot/save of a prompt or state.
+
+  ## Request Body
+  ```json
+  {
+    "title": "string (optional) - Title for the save",
+    "kind": "string (optional) - Type: 'system', 'user', 'prompt', 'state' (default: 'state')",
+    "provider": "string (optional) - Provider name",
+    "model": "string (optional) - Model ID",
+    "data": "object (optional) - Arbitrary data to save (system_prompt, user_prompt, response, parameters, notes, etc.)"
+  }
+  ```
+
+  ## Response
+  ```json
+  {
+    "id": "uuid",
+    "title": "string",
+    "kind": "string",
+    "provider": "string",
+    "model": "string",
+    "created_at": "ISO 8601 timestamp"
+  }
+  ```
+}

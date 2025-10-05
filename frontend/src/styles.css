@@ -1,0 +1,147 @@
+@import "tailwindcss";
+
+/* App base styles can go here if needed later */
+
+.use-app-font {
+  font-family: var(--app-font), ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, Noto Sans, "Apple Color Emoji", "Segoe UI Emoji";
+}
+
+/* Enhanced markdown/prose styling for better readability */
+.prose {
+  /* Paragraph spacing */
+  p {
+    margin-top: 1em;
+    margin-bottom: 1em;
+  }
+
+  /* First paragraph no top margin */
+  > :first-child {
+    margin-top: 0;
+  }
+
+  /* Last element no bottom margin */
+  > :last-child {
+    margin-bottom: 0;
+  }
+
+  /* Heading spacing */
+  h1, h2, h3, h4, h5, h6 {
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  h1 { font-size: 1.5em; }
+  h2 { font-size: 1.3em; }
+  h3 { font-size: 1.15em; }
+
+  /* List spacing */
+  ul, ol {
+    margin-top: 1em;
+    margin-bottom: 1em;
+    padding-left: 1.5em;
+  }
+
+  li {
+    margin-top: 0.25em;
+    margin-bottom: 0.25em;
+  }
+
+  /* Code blocks */
+  pre {
+    margin-top: 1em;
+    margin-bottom: 1em;
+    padding: 1em;
+    border-radius: 0.5em;
+    overflow-wrap: break-word;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background-color: rgb(243 244 246);
+  }
+
+  :is(.dark &) pre {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+
+  /* Inline code */
+  code {
+    padding: 0.2em 0.4em;
+    border-radius: 0.25em;
+    font-size: 0.9em;
+    background-color: rgb(243 244 246);
+    word-break: break-word;
+  }
+
+  :is(.dark &) code {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+
+  /* Code inside pre shouldn't have double background */
+  pre code {
+    padding: 0;
+    background-color: transparent;
+  }
+
+  /* Blockquotes */
+  blockquote {
+    margin-top: 1em;
+    margin-bottom: 1em;
+    padding-left: 1em;
+    border-left: 3px solid rgb(209 213 219);
+    font-style: italic;
+  }
+
+  :is(.dark &) blockquote {
+    border-left-color: rgba(255, 255, 255, 0.2);
+  }
+
+  /* Tables */
+  table {
+    margin-top: 1em;
+    margin-bottom: 1em;
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  th, td {
+    padding: 0.5em;
+    border: 1px solid rgb(229 231 235);
+  }
+
+  :is(.dark &) th,
+  :is(.dark &) td {
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  th {
+    background-color: rgb(249 250 251);
+    font-weight: 600;
+  }
+
+  :is(.dark &) th {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+
+  /* Links */
+  a {
+    color: rgb(59 130 246);
+    text-decoration: underline;
+  }
+
+  :is(.dark &) a {
+    color: rgb(96 165 250);
+  }
+
+  /* Horizontal rules */
+  hr {
+    margin-top: 1.5em;
+    margin-bottom: 1.5em;
+    border-color: rgb(229 231 235);
+  }
+
+  :is(.dark &) hr {
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+}
+

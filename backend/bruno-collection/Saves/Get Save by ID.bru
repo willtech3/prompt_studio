@@ -1,0 +1,37 @@
+meta {
+  name: Get Save by ID
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/saves/your-save-id-here
+  body: none
+  auth: none
+}
+
+docs {
+  # Get Save by ID
+
+  Retrieves a specific saved snapshot by its ID.
+
+  ## URL Parameters
+  - `sid` (required): The UUID of the save to retrieve
+
+  ## Response
+  ```json
+  {
+    "id": "uuid",
+    "title": "string",
+    "kind": "string",
+    "provider": "string",
+    "model": "string",
+    "data": "object - The saved data",
+    "created_at": "ISO 8601 timestamp"
+  }
+  ```
+
+  ## Error Responses
+  - 404: Save not found
+  - 400: Database not configured
+}

@@ -1,0 +1,31 @@
+meta {
+  name: List Saves
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/saves
+  body: none
+  auth: none
+}
+
+docs {
+  # List Saves
+
+  Retrieves all saved snapshots, ordered by creation date (newest first).
+
+  ## Response
+  ```json
+  [
+    {
+      "id": "uuid",
+      "title": "string",
+      "kind": "string",
+      "provider": "string",
+      "model": "string",
+      "created_at": "ISO 8601 timestamp"
+    }
+  ]
+  ```
+}
