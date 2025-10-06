@@ -1,300 +1,114 @@
-# Prompt Engineering Studio 🚀
+# Prompt Engineering Studio
 
-A modern, comprehensive platform for optimizing and evaluating AI prompts across 16 models via OpenRouter's unified API.
+A web application for testing and optimizing prompts across multiple models using OpenRouter's API.
 
-## 🎉 Current Status: MVP Fully Functional
+## What It Does
 
-The MVP is complete and operational! You can now:
-- Chat with 16 AI models in real-time
-- Optimize prompts with AI-powered suggestions
-- Save and restore your work with snapshots
-- Access provider-specific best practices
-- Customize model parameters extensively
+- Test prompts against different AI models (OpenAI, Anthropic, Google, DeepSeek, XAI)
+- Stream responses in real-time with markdown rendering
+- Save and restore prompt sessions (snapshots)
+- Adjust model parameters (temperature, top-p, penalties, etc.)
+- Interpolate variables in prompts using `{{variable}}` syntax
 
-**Quick Start**: See the [Quick Start](#-quick-start) section below to run the application locally.
+## Technology Stack
 
-## 📋 Project Overview
+**Backend:** FastAPI (Python 3.13), PostgreSQL 16, SQLAlchemy 2.0, uv package manager
 
-Prompt Engineering Studio is a cutting-edge application that combines the latest web technologies to provide a powerful platform for:
-- **Prompt Management**: Create, version, and organize prompts with templates and variables
-- **Multi-Model Access**: Connect to 16 AI models through OpenRouter's unified API
-- **Best Practices Engine**: Get model-specific recommendations and automatic improvements
-- **Evaluation System**: Test and compare prompts with custom metrics and A/B testing
-- **Cost Optimization**: Track token usage and optimize for performance vs. cost
+**Frontend:** React 19, TypeScript, Tailwind CSS v4, Vite, Zustand
 
-## 🛠️ Technology Stack
+**AI:** OpenRouter API for model access
 
-### Backend
-- **FastAPI** (Python 3.11+) - High-performance async API framework
-- **PostgreSQL 16** - Primary database with JSONB support
-- **SQLAlchemy 2.0** - ORM with async support
-- **Pydantic v2** - Data validation
-- **JWT** - Authentication
-- **Redis** - Caching and task queue
-
-### Frontend
-- **React 19** - Latest React with Server Components
-- **TypeScript** - Type safety
-- **Tailwind CSS v4** - Utility-first CSS framework
-- **Shadcn/ui** - Component library
-- **Vite** - Build tool
-- **Zustand** - State management
-
-### AI Integration
-- **OpenRouter API** - Unified access to 16 models
-- Support for OpenAI, Anthropic, Google, Meta, and more
-
-## 📁 Project Structure
+## Project Structure
 
 ```
 prompt_studio/
-├── backend/               # FastAPI backend
-│   ├── app/              # Application code
-│   ├── api/              # API endpoints
-│   ├── models/           # Database models
-│   ├── services/         # Business logic
-│   ├── config/           # Configuration
-│   └── tests/            # Backend tests
-├── frontend/             # React frontend
+├── backend/
+│   ├── app/main.py           # FastAPI application
+│   ├── models/               # SQLAlchemy models
+│   ├── services/             # OpenRouter integration
+│   ├── config/               # Database configuration
+│   └── alembic/              # Database migrations
+├── frontend/
 │   ├── src/
-│   │   ├── components/   # React components
-│   │   ├── pages/        # Page components
-│   │   ├── services/     # API services
-│   │   ├── hooks/        # Custom hooks
-│   │   └── stores/       # State management
-│   └── public/           # Static assets
-├── database/             # Database scripts
-│   ├── migrations/       # Alembic migrations
-│   └── seeders/          # Data seeders
-└── docs/                 # Documentation
-    ├── api/              # API documentation
-    ├── frameworks/       # Framework guides
-    ├── database/         # Database docs
-    └── best_practices/   # Prompt engineering guides
+│   │   ├── components/       # React components
+│   │   ├── store/            # Zustand state management
+│   │   └── services/api.ts   # API client
+│   └── public/
+└── docs/                     # Documentation
 ```
 
-## 📚 Documentation
+## Quick Start
 
-Comprehensive documentation is available in the `docs/` folder:
+**Prerequisites:**
+- Python 3.13+ with `uv` package manager
+- Node.js 20+
+- PostgreSQL 16 (optional—app works without DB)
+- OpenRouter API key ([get one here](https://openrouter.ai))
 
-- **[Design Specification](docs/DESIGN_SPECIFICATION.md)** - Complete system design and architecture
-- **[Implementation Plan](docs/IMPLEMENTATION_PLAN.md)** - Detailed 10-week development roadmap
-- **[FastAPI Documentation](docs/frameworks/FASTAPI_DOCUMENTATION.md)** - Backend framework guide
-- **[React 19 Documentation](docs/frameworks/REACT_19_DOCUMENTATION.md)** - Frontend framework guide
-- **[Tailwind CSS v4 Documentation](docs/frameworks/TAILWIND_CSS_V4_DOCUMENTATION.md)** - Styling guide
-- **[OpenRouter Documentation](docs/api/OPENROUTER_DOCUMENTATION.md)** - AI model integration
-- **[PostgreSQL Documentation](docs/database/POSTGRESQL_DOCUMENTATION.md)** - Database setup and queries
-- **[Prompt Engineering Best Practices](docs/best_practices/PROMPT_ENGINEERING_BEST_PRACTICES.md)** - Comprehensive prompting guide
-
-## 🚀 Quick Start
-
-### Prerequisites
-- **Python 3.13+** with `uv` package manager
-- **Node.js 20+**
-- **PostgreSQL 16** (optional - app works without DB)
-- **OpenRouter API Key** ([Get one here](https://openrouter.ai))
-
-### Backend Setup
-
+**Backend:**
 ```bash
 cd backend
-
-# Create and activate uv virtual environment
-uv venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install dependencies with uv
+uv venv && source .venv/bin/activate
 uv pip install -r pyproject.toml
-
-# Set up environment variables
-cp .env.example .env
-# Add your OPENROUTER_API_KEY to .env
-# Optionally add DATABASE_URL for persistence
-
-# Run migrations (if using database)
-alembic upgrade head
-
-# Seed provider content (if using database)
-python scripts/seed_provider_content.py
-
-# Start the server
+cp .env.example .env  # Add OPENROUTER_API_KEY
+alembic upgrade head  # Optional: if using database
+python scripts/seed_provider_content.py  # Optional: load best practices
 uvicorn app.main:app --reload --port 8000
 ```
 
-### Frontend Setup
-
+**Frontend:**
 ```bash
 cd frontend
-
-# Install dependencies
 npm install
-
-# Start development server (proxies API to localhost:8000)
 npm run dev
 ```
 
-### Access the Application
+**Access:**
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:8000
+- API docs: http://localhost:8000/docs
 
-- **Frontend**: http://localhost:5173
-- **Backend API**: http://localhost:8000
-- **API Docs**: http://localhost:8000/docs
+**Note:** Database is optional for basic chat. Required for snapshots, best practices, and model catalog.
 
-**Note**: The application will work without a database for basic chat functionality. Database is required for:
-- Saving snapshots
-- Loading provider best practices
-- Model catalog management
+## Features
 
-## 🔑 Key Features (Implemented in MVP)
+**Streaming & Rendering:**
+- Server-Sent Events (SSE) for real-time streaming
+- Markdown rendering with syntax highlighting
+- Copy to clipboard
 
-### ✅ Real-Time AI Chat
-- 🤖 Access to 16 AI models via OpenRouter
-- ⚡ Server-Sent Events (SSE) streaming for real-time responses
-- 🎛️ Comprehensive parameter controls:
-  - Temperature, Top-P, Top-K
-  - Frequency and presence penalties
-  - Reasoning effort (for compatible models)
-  - Max tokens, stop sequences, and more
-- 📝 Markdown rendering for formatted responses
-- 📋 Copy-to-clipboard functionality
+**Model Controls:**
+- 16 models across OpenAI, Anthropic, Google, DeepSeek, XAI
+- Parameter adjustment: temperature, top-p, top-k, penalties, seed, stop sequences
+- Reasoning effort control for compatible models
 
-### ✅ Prompt Optimization
-- 🔧 AI-powered prompt improvement suggestions
-- 📚 Provider-specific optimization guides
-- 💡 Best practices integration
-- ✨ Automated clarity and structure enhancements
+**Prompt Tools:**
+- Variable interpolation with `{{variable}}` syntax
+- AI-powered prompt optimization
+- Provider-specific best practices and guides
 
-### ✅ Provider Content System
-- 📖 Best practices for each provider (OpenAI, Anthropic, Google, etc.)
-- 🎯 Optimization guides tailored to specific models
-- 🗂️ Dynamic content loading from database
-- 🔄 Refresh model catalog from OpenRouter API
+**State Management:**
+- Save/load snapshots (full UI state including prompts, parameters, responses)
+- History browsing with timestamps
+- Dark/light theme with system preference detection
 
-### ✅ Snapshot System
-- 💾 Save complete UI state (prompts, parameters, responses)
-- 📂 Load previous sessions with full restoration
-- 🕐 Timestamped history
-- 🔍 Browse and search saved snapshots
+## Development Commands
 
-### ✅ User Experience
-- 🌓 Dark/light theme with system preference support
-- 📱 Responsive mobile-friendly design
-- ⌨️ Keyboard shortcuts (Cmd/Ctrl+Enter to run)
-- 🔔 Toast notifications for feedback
-- 🎨 Modern UI with Tailwind CSS v4
-
-### 🚧 Coming Soon (Post-MVP)
-- 🔐 User authentication and accounts
-- 📊 Advanced analytics and cost tracking
-- 🧪 A/B testing and evaluation framework
-- 👥 Team collaboration features
-- 📦 Template library with variables
-
-## 🗓️ Development Roadmap
-
-### ✅ MVP Phase (Completed)
-- ✅ **UI Foundation**: React 19 + TypeScript + Tailwind CSS v4
-- ✅ **Backend API**: FastAPI with async support
-- ✅ **Database**: PostgreSQL 16 with SQLAlchemy 2.0
-- ✅ **OpenRouter Integration**: Real-time streaming, 16 models
-- ✅ **Model Catalog**: Dynamic model management and refresh
-- ✅ **Provider Content**: Best practices and optimization guides
-- ✅ **Snapshot System**: Save and restore UI state
-- ✅ **Prompt Optimization**: AI-powered prompt improvement
-- ✅ **Theme System**: Dark/light mode with system preference
-- ✅ **Responsive Design**: Mobile-friendly layout
-
-### 🚧 Post-MVP: Authentication & Users (In Progress)
-- [ ] JWT authentication
-- [ ] User registration and login
-- [ ] Profile management
-- [ ] Personal prompt libraries
-- [ ] User-specific API key storage
-
-### 📋 Future Enhancements
-- [ ] **Advanced Features**: Prompt variables, templates, A/B testing
-- [ ] **Evaluation System**: Custom metrics, batch processing
-- [ ] **Analytics**: Token usage tracking, cost optimization
-- [ ] **Team Features**: Shared prompts, comments, collaboration
-- [ ] **Testing**: Unit tests, integration tests, E2E tests
-- [ ] **Deployment**: Production setup, monitoring, CI/CD
-
-## 🧪 Testing
-
-### Backend Tests
+**Backend (from `backend/` directory):**
 ```bash
-cd backend
-pytest tests/ -v --cov=app
+just start      # Start dev server
+just test       # Run tests
+just lint       # Lint code
+just migrate    # Run database migrations
+just seed       # Seed provider content
 ```
 
-### Frontend Tests
+**Frontend:**
 ```bash
-cd frontend
-npm run test
-npm run test:e2e
+npm run dev     # Start dev server
+npm run build   # Production build
 ```
 
-## 🚢 Deployment
+## License
 
-### Production Build
-
-Backend:
-```bash
-cd backend
-gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker
-```
-
-Frontend:
-```bash
-cd frontend
-npm run build
-npm run preview
-```
-
-## 🔒 Security
-
-- JWT-based authentication
-- Input sanitization
-- SQL injection prevention via ORM
-- XSS protection
-- Rate limiting
-- Encrypted API key storage
-
-## 📊 Performance Goals
-
-- API response time: < 100ms
-- Page load time: < 2 seconds
-- System uptime: > 99.9%
-- Support for 10,000+ concurrent users
-
-## 🤝 Contributing
-
-Please read our contributing guidelines before submitting pull requests.
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Open a pull request
-
-## 📝 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🙏 Acknowledgments
-
-- OpenRouter for unified AI model access
-- FastAPI for the excellent web framework
-- React team for React 19
-- Tailwind Labs for Tailwind CSS v4
-- All contributors and maintainers
-
-## 📞 Support
-
-For issues, questions, or suggestions:
-- Create an issue on GitHub
-- Check the documentation
-- Contact the development team
-
----
-
-**Built with ❤️ for the prompt engineering community**
+MIT

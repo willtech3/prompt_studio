@@ -2,263 +2,266 @@
 
 ## Overview
 
-Prompt Studio uses a **hybrid approach** to display well-formatted AI responses, combining natural AI output with intelligent UI rendering. This matches how modern AI applications (ChatGPT, Claude, Perplexity) handle response formatting.
+Prompt Studio uses **Server-Sent Events (SSE)** to stream AI responses from OpenRouter in real-time, rendering them progressively as markdown. This guide explains the complete flow from API request to rendered UI.
 
-## How It Works
+---
 
-### 1. **The AI Models Output Markdown Naturally**
+## Architecture
 
-Modern LLMs are trained on markdown and will naturally use it when asked. No special prompting required in most cases:
+### 1. Frontend → Backend Request
 
-- **Headers**: `# Main Title`, `## Section`, `### Subsection`
-- **Bold/Italic**: `**bold text**`, `*italic text*`
-- **Lists**: 
-  ```
-  - Bullet point
-  - Another point
-  
-  1. Numbered item
-  2. Another numbered item
-  ```
-- **Code Blocks**:
-  ````
-  ```python
-  def hello():
-      print("Hello, world!")
-  ```
-  ````
-- **Inline Code**: `variable_name` or `function()`
-- **Paragraphs**: Double line breaks create paragraph spacing
-- **Links**: `[link text](url)`
-- **Blockquotes**: `> quoted text`
-- **Tables**: Pipe-separated tables with headers
-
-### 2. **The UI Renders Markdown Properly**
-
-Our ResponsePanel component:
-- Uses `react-markdown` to parse markdown syntax
-- Applies `@tailwindcss/typography` for beautiful default styling
-- Adds `rehype-highlight` for syntax highlighting in code blocks
-- Includes custom CSS for optimal spacing and readability
-- Supports streaming (renders incrementally as tokens arrive)
-- Handles both light and dark themes
-
-### 3. **Technical Stack**
+The frontend ([api.ts:23](../frontend/src/services/api.ts#L23)) creates an EventSource connection:
 
 ```typescript
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'           // GitHub Flavored Markdown
-import rehypeHighlight from 'rehype-highlight' // Code syntax highlighting
+streamChat(request: { model, prompt, system?, temperature?, ... }): EventSource {
+  const params = new URLSearchParams()
+  params.set('model', request.model)
+  params.set('prompt', request.prompt)
+  // ... other parameters
+
+  return new EventSource(`/api/chat/stream?${params.toString()}`)
+}
 ```
 
-**Installed packages:**
-- `react-markdown` - Core markdown rendering
-- `remark-gfm` - Tables, strikethrough, task lists, autolinks
-- `rehype-highlight` - Syntax highlighting for code
-- `highlight.js` - Language detection and themes
-- `@tailwindcss/typography` - Beautiful typography defaults
+**Key points:**
+- Uses browser's native `EventSource` API
+- All parameters passed as URL query params
+- Vite dev server proxies `/api/*` to backend (localhost:8000)
 
-## Getting Well-Formatted Responses
+### 2. Backend → OpenRouter Streaming
 
-### Option A: Let the AI Decide (Recommended)
+Backend ([app/main.py:71](../backend/app/main.py#L71)) streams from OpenRouter:
 
-Most models will naturally format their output well. Just ask your question:
+```python
+@app.get("/api/chat/stream")
+async def stream_chat(
+    model: str,
+    prompt: str = "",
+    system: Optional[str] = None,
+    temperature: float = 0.7,
+    # ... other parameters
+):
+    async def generate():
+        svc = OpenRouterService()
+        async for chunk in svc.stream_completion(model, messages, **params):
+            yield f"data: {json.dumps({'content': chunk})}\n\n"
+        yield f"data: {json.dumps({'done': True})}\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
+```
+
+**Response format:**
+```
+data: {"content": "Hello"}
+
+data: {"content": " world"}
+
+data: {"done": true}
 
 ```
-Explain how to implement a binary search algorithm.
+
+### 3. Frontend Receives & Renders
+
+ResponsePanel ([ResponsePanel.tsx:67](../frontend/src/components/ResponsePanel.tsx#L67)) listens for chunks:
+
+```typescript
+es.addEventListener('message', (e) => {
+  const parsed = JSON.parse(e.data)
+  if (parsed.done) {
+    setIsStreaming(false)
+    api.stopStream(currentStream.current)
+  } else if (parsed.content) {
+    appendResponse(parsed.content)  // Adds to existing response
+  }
+})
 ```
 
-The AI will typically respond with proper headers, code blocks, and paragraphs.
-
-### Option B: Explicitly Request Formatting
-
-For more control, add formatting instructions to your prompt:
-
+**Rendering** ([ResponsePanel.tsx:156](../frontend/src/components/ResponsePanel.tsx#L156)):
+```tsx
+<div className="prose prose-sm dark:prose-invert max-w-none">
+  <ReactMarkdown
+    remarkPlugins={[remarkGfm]}
+    rehypePlugins={[rehypeHighlight]}
+  >
+    {response}
+  </ReactMarkdown>
+</div>
 ```
-Explain how to implement a binary search algorithm.
 
+---
+
+## Markdown Rendering Stack
+
+**Packages used:**
+- `react-markdown` - Core markdown parser and renderer
+- `remark-gfm` - GitHub Flavored Markdown (tables, strikethrough, task lists)
+- `rehype-highlight` - Syntax highlighting for code blocks
+- `highlight.js` - Language detection and themes (dark theme only)
+- `@tailwindcss/typography` - Base prose styles
+
+**Custom styles** ([styles.css:10](../frontend/src/styles.css#L10)):
+- Custom prose overrides for dark mode
+- Code blocks forced to `#0a0c10` background
+- Paragraph spacing (1em top/bottom)
+- Heading hierarchy with proper weights
+- List, table, and blockquote styling
+
+---
+
+## How Models Output Markdown
+
+Modern LLMs are trained on markdown and naturally use it. No special prompting needed:
+
+**Common patterns:**
+- Headers: `#`, `##`, `###`
+- Bold/italic: `**bold**`, `*italic*`
+- Lists: `-` for bullets, `1.` for numbered
+- Code blocks: ````python ... ````
+- Inline code: `` `code` ``
+- Links: `[text](url)`
+- Tables: Pipe-separated with headers
+
+**If you need explicit formatting**, add to your prompt:
+```
 Format your response with:
-- Clear section headers
+- Clear section headers (##)
 - Code examples in code blocks
 - Bullet points for key steps
 ```
 
-### Option C: Use System Prompts
+---
 
-For consistent formatting across all responses, add to your system prompt:
+## Variable Interpolation
 
-```
-You are a helpful assistant. Always format your responses using markdown:
-- Use headers (##) for main sections
-- Use code blocks (```) for code examples
-- Use bullet points for lists
-- Separate paragraphs with blank lines
-- Use **bold** for emphasis
-```
+Before sending to API, prompts are interpolated ([ResponsePanel.tsx:36](../frontend/src/components/ResponsePanel.tsx#L36)):
 
-## Examples
-
-### Example 1: Technical Explanation
-
-**Prompt:**
-```
-Explain async/await in JavaScript
-```
-
-**Expected Response Format:**
-```markdown
-# Async/Await in JavaScript
-
-## Overview
-
-Async/await is a modern syntax for handling asynchronous operations...
-
-## Basic Syntax
-
-```javascript
-async function fetchData() {
-  const response = await fetch('api/data')
-  return response.json()
+```typescript
+const interpolate = (text?: string) => {
+  if (!text) return ''
+  return text.replace(/\{\{\s*([a-zA-Z0-9_\-]+)\s*\}\}/g, (_m, key) => {
+    const found = variables.find((v) => v.name.trim() === key)
+    return found ? found.value : _m
+  })
 }
 ```
 
-## Key Points
+**Example:**
+- User prompt: `Summarize {{topic}} in {{language}}`
+- Variables: `topic="AI", language="Spanish"`
+- Sent to API: `Summarize AI in Spanish`
 
-- `async` functions always return promises
-- `await` pauses execution until promise resolves
-- Better error handling with try/catch
+---
+
+## Streaming States
+
+**State management** (Zustand store):
+```typescript
+isStreaming: boolean      // true while receiving chunks
+response: string          // accumulated response text
+appendResponse(chunk)     // adds chunk to response
+setResponse(text)         // replaces entire response
 ```
 
-### Example 2: Step-by-Step Guide
+**UI indicators:**
+- Generate button (green) when idle
+- Stop button (gray) when streaming
+- "Generating…" text with pulse animation
+- Response renders incrementally as chunks arrive
 
-**Prompt:**
+---
+
+## Error Handling
+
+**Stream errors** ([ResponsePanel.tsx:83](../frontend/src/components/ResponsePanel.tsx#L83)):
+```typescript
+es.addEventListener('error', () => {
+  setIsStreaming(false)
+  api.stopStream(currentStream.current)
+})
 ```
-How do I set up a React project?
+
+**Backend errors** ([app/main.py:158](../backend/app/main.py#L158)):
+```python
+except Exception as e:
+    yield f"data: {json.dumps({'error': str(e)})}\n\n"
 ```
 
-**Expected Response Format:**
-```markdown
-## Setting Up a React Project
+Currently basic error handling—no retries or fallbacks needed for greenfield MVP.
 
-### Prerequisites
+---
 
-- Node.js 18 or higher
-- npm or yarn
+## Parameters Passed to OpenRouter
 
-### Steps
+All parameters from UI settings are forwarded:
 
-1. Create a new project:
-   ```bash
-   npm create vite@latest my-app -- --template react-ts
-   ```
+**Core parameters:**
+- `model` - Model ID (e.g., `anthropic/claude-3.5-sonnet`)
+- `temperature` (0-2) - Sampling randomness
+- `top_p` (0-1) - Nucleus sampling
+- `max_tokens` - Response length limit
 
-2. Navigate to project:
-   ```bash
-   cd my-app
-   ```
+**Advanced parameters** (optional):
+- `top_k`, `min_p`, `top_a` - Additional sampling controls
+- `frequency_penalty`, `presence_penalty`, `repetition_penalty` - Repetition control
+- `seed` - Deterministic sampling
+- `response_format` - Force JSON output
+- `stop` - Custom stop sequences
+- `logprobs`, `top_logprobs` - Token probability output
+- `logit_bias` - Token bias adjustments
+- `reasoning_effort` - For reasoning models (low/medium/high)
 
-3. Install dependencies:
-   ```bash
-   npm install
-   ```
+---
 
-4. Start dev server:
-   ```bash
-   npm run dev
-   ```
+## Accessibility
 
-Your app should now be running at `http://localhost:5173`
+**Screen reader support:**
+```tsx
+<div className="prose..." aria-live="polite">
 ```
+
+The `aria-live="polite"` attribute announces new content to screen readers as it streams in.
+
+---
 
 ## Troubleshooting
 
-### Response Shows Raw Markdown
+### No response streaming
+- Check backend is running (localhost:8000)
+- Verify `OPENROUTER_API_KEY` is set in backend `.env`
+- Check browser console for EventSource errors
 
-If you see raw markdown (like `**bold**` instead of **bold**):
-1. Ensure `@tailwindcss/typography` is installed
-2. Check that `tailwind.config.js` includes the typography plugin
-3. Verify the prose classes are applied: `prose prose-sm dark:prose-invert`
+### Raw markdown showing
+- Ensure `@tailwindcss/typography` is installed
+- Verify `prose` classes are applied
+- Check custom prose CSS is loaded
 
-### No Syntax Highlighting in Code Blocks
+### Code blocks not highlighted
+- `rehype-highlight` and `highlight.js` must be installed
+- Import highlight.js CSS: `import 'highlight.js/styles/github-dark.css'`
 
-If code blocks don't have syntax highlighting:
-1. Ensure `rehype-highlight` and `highlight.js` are installed
-2. Check that rehypeHighlight is in the rehypePlugins array
-3. Verify highlight.js CSS is imported
+### Stream doesn't stop
+- Click Stop button to close EventSource
+- Backend will continue generating but frontend ignores it
 
-### Paragraphs Run Together
+---
 
-If text lacks spacing:
-1. Ask the AI to add blank lines between paragraphs
-2. Check that custom prose CSS is loaded
-3. The AI might be outputting single line breaks instead of double
+## Implementation Notes
 
-### Text is Too Wide
+**Why SSE instead of WebSocket?**
+- Simpler: browser-native `EventSource` API
+- One-way streaming sufficient for this use case
+- Better for serverless/stateless backends
 
-The `max-w-none` class on the prose div allows full width. To limit width:
-```tsx
-<div className="prose prose-sm dark:prose-invert max-w-3xl">
-```
+**Why accumulate on frontend instead of backend?**
+- Reduces memory on backend (stateless)
+- Frontend already needs state for UI rendering
+- Simpler backend implementation
 
-## Best Practices
+**Why dark mode only for code?**
+- MVP focuses on dark theme
+- `github-dark.css` provides consistent styling
+- Can add theme switching later if needed
 
-### For Prompt Engineers
+---
 
-1. **Trust the AI**: Modern models know markdown. Don't over-specify format unless needed.
-2. **Be Specific**: If you need tables or specific structure, ask for it explicitly.
-3. **Test Different Models**: Some models format better than others.
-4. **Use Examples**: Show the AI the format you want in the prompt.
-
-### For Developers
-
-1. **Keep Styles Simple**: The typography plugin handles most cases.
-2. **Test Streaming**: Ensure incremental rendering works smoothly.
-3. **Dark Mode**: Test both themes for readability.
-4. **Mobile**: Ensure code blocks scroll properly on small screens.
-5. **Accessibility**: Prose content is marked with `aria-live="polite"` for screen readers.
-
-## Advanced: Custom Markdown Components
-
-You can customize how specific markdown elements render:
-
-```tsx
-<ReactMarkdown
-  remarkPlugins={[remarkGfm]}
-  rehypePlugins={[rehypeHighlight]}
-  components={{
-    // Custom code block with copy button
-    code({node, inline, className, children, ...props}) {
-      return inline ? (
-        <code className={className} {...props}>{children}</code>
-      ) : (
-        <CodeBlockWithCopy className={className}>
-          {children}
-        </CodeBlockWithCopy>
-      )
-    },
-    // Custom link behavior
-    a({node, children, href, ...props}) {
-      return (
-        <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
-          {children}
-        </a>
-      )
-    }
-  }}
->
-  {response}
-</ReactMarkdown>
-```
-
-## Summary
-
-**The Answer to Your Question:**
-
-> "Is formatting a matter of the prompt or the UI?"
-
-**Both!** The best approach is:
-- Let AI models output **natural markdown** (they're trained for this)
-- Have the UI **properly render** that markdown with good typography
-- Add **prompt instructions** only when you need specific formatting
-
-This hybrid approach gives you the best of both worlds: natural, well-structured AI output + beautiful, readable rendering.
+This guide reflects the **actual implementation** as of MVP completion. All file references link to specific line numbers in the codebase.

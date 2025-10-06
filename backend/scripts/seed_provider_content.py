@@ -1,4 +1,4 @@
-"""Seed provider content from markdown files in docs/best_practices/."""
+"""Seed provider content from markdown files in docs/prompting_guides/."""
 import asyncio
 import sys
 from pathlib import Path
@@ -11,8 +11,8 @@ from models.provider_content import ProviderContent
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-# Path to best practices documentation
-DOCS_DIR = Path(__file__).resolve().parents[2] / "docs" / "best_practices"
+# Path to prompting guides documentation
+DOCS_DIR = Path(__file__).resolve().parents[2] / "docs" / "prompting_guides"
 
 # Model ID mappings (model_id from OpenRouter to documentation filename)
 MODEL_MAPPINGS = {
@@ -39,7 +39,7 @@ MODEL_MAPPINGS = {
     "deepseek/deepseek-v3.2-exp": "DEEPSEEK_V32EXP_GUIDE.md",
 }
 
-# Provider best practices filenames
+# Provider prompting guide filenames
 PROVIDER_FILES = {
     "openai": "OPENAI_BEST_PRACTICES.md",
     "anthropic": "ANTHROPIC_BEST_PRACTICES.md",
@@ -268,7 +268,7 @@ async def seed_provider_content():
 
         print("\nSeeding provider content from markdown files...")
 
-        # Seed provider-level best practices
+        # Seed provider-level prompting guides
         for provider_id, filename in PROVIDER_FILES.items():
             filepath = DOCS_DIR / filename
             if not filepath.exists():
@@ -282,13 +282,13 @@ async def seed_provider_content():
             record = ProviderContent(
                 provider_id=provider_id,
                 model_id=None,  # Provider-level guidance
-                content_type="best_practice",
+                content_type="prompting_guide",
                 title=title,
                 content={"markdown": content},
                 doc_url=doc_url,
             )
             session.add(record)
-            print(f"  ✓ Added provider best practices: {provider_id}")
+            print(f"  ✓ Added provider prompting guide: {provider_id}")
 
         # Seed model-specific guides
         for model_id, filename in MODEL_MAPPINGS.items():

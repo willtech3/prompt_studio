@@ -124,10 +124,10 @@ export class APIClient {
     return data?.data ?? []
   }
 
-  async getProviderBestPractices(providerId: string, modelId?: string): Promise<any> {
+  async getProviderPromptingGuides(providerId: string, modelId?: string): Promise<any> {
     const url = modelId
-      ? `/api/providers/${providerId}/best-practices?model_id=${encodeURIComponent(modelId)}`
-      : `/api/providers/${providerId}/best-practices`
+      ? `/api/providers/${providerId}/prompting-guides?model_id=${encodeURIComponent(modelId)}`
+      : `/api/providers/${providerId}/prompting-guides`
     const res = await fetch(url)
     if (!res.ok) throw new Error(await res.text())
     return res.json()

@@ -92,7 +92,7 @@ export function PromptGuidanceModal() {
         // Load content for all providers
         const contentPromises = PROVIDERS.map(async ({ id }) => {
           try {
-            const data = await api.getProviderBestPractices(id)
+            const data = await api.getProviderPromptingGuides(id)
             return {
               provider: id,
               content: {
@@ -145,7 +145,7 @@ export function PromptGuidanceModal() {
     let cancelled = false
     ;(async () => {
       try {
-        const data = await api.getProviderBestPractices(activeTab, selectedModel)
+        const data = await api.getProviderPromptingGuides(activeTab, selectedModel)
         if (!cancelled && data.model_specific) {
           setProviderData((prev) => ({
             ...prev,
@@ -250,7 +250,7 @@ export function PromptGuidanceModal() {
                   className="w-full flex items-center justify-between p-4 bg-[#0f1117] hover:bg-[#14161f] rounded-lg border border-white/10 transition-colors mb-2"
                 >
                   <h3 className="text-base font-semibold text-white">
-                    General {PROVIDERS.find(p => p.id === activeTab)?.label} Best Practices
+                    General {PROVIDERS.find(p => p.id === activeTab)?.label} Prompting Guide
                   </h3>
                   {generalExpanded ? (
                     <ChevronDown className="h-5 w-5 text-gray-400" />

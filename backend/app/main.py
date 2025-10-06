@@ -244,13 +244,13 @@ async def get_provider_guide(provider_id: str, session: AsyncSession = Depends(g
     return row.content
 
 
-@app.get("/api/providers/{provider_id}/best-practices")
-async def get_provider_best_practices(
+@app.get("/api/providers/{provider_id}/prompting-guides")
+async def get_provider_prompting_guides(
     provider_id: str,
     model_id: Optional[str] = Query(None, description="Optional model ID for model-specific guidance"),
     session: AsyncSession = Depends(get_session)
 ):
-    """Return best practices for a provider, optionally filtered by model."""
+    """Return prompting guides for a provider, optionally filtered by model."""
     await create_all()
 
     # Build query for general provider guidance (model_id IS NULL)
@@ -263,7 +263,7 @@ async def get_provider_best_practices(
     general_row = (await session.execute(query)).scalar_one_or_none()
 
     if not general_row:
-        raise HTTPException(status_code=404, detail="Provider best practices not found")
+        raise HTTPException(status_code=404, detail="Provider prompting guides not found")
 
     result = {
         "title": general_row.title,
@@ -323,7 +323,7 @@ async def optimize_prompt(req: OptimizeRequest, session: AsyncSession = Depends(
     guide = guide_row.content.get("guide", "Be clear, concise, and explicit.") if guide_row else "Be clear, concise, and explicit."
     sys = (
         "You are an expert prompt engineer. Optimize the given {kind} prompt "
-        "for the specified model while preserving the user's intent. Apply the provider's best practices. "
+        "for the specified model while preserving the user's intent. Apply the provider's prompting guides. "
         "Return strictly JSON with keys: optimized (string), changes (string[]), notes (string[])."
     ).format(kind=req.kind)
 
