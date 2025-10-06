@@ -11,6 +11,8 @@
 
 /* Enhanced markdown/prose styling for better readability */
 .prose {
+  color: #1f2937;
+
   /* Paragraph spacing */
   p {
     margin-top: 1em;
@@ -60,8 +62,8 @@
     overflow-wrap: break-word;
     white-space: pre-wrap;
     word-break: break-word;
-    background-color: #f5f5f5 !important;
-    color: #1f2937;
+    background-color: #1f2937 !important;
+    color: #e5e7eb;
   }
 
   /* Inline code */
@@ -69,8 +71,8 @@
     padding: 0.2em 0.4em;
     border-radius: 0.25em;
     font-size: 0.9em;
-    background-color: #f5f5f5 !important;
-    color: #1f2937;
+    background-color: #1f2937 !important;
+    color: #e5e7eb;
     word-break: break-word;
   }
 
@@ -125,6 +127,8 @@
 
 /* Dark mode overrides for prose */
 .dark .prose {
+  color: #e5e7eb;
+
   pre {
     background-color: #0a0c10 !important;
     color: #e5e7eb;

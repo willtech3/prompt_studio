@@ -21,17 +21,11 @@ function getInitialTheme(): Theme {
 }
 
 function applyThemeToDOM(theme: Theme) {
-  const html = document.documentElement
-  const before = html.classList.contains('dark')
-
   if (theme === 'dark') {
-    html.classList.add('dark')
+    document.documentElement.classList.add('dark')
   } else {
-    html.classList.remove('dark')
+    document.documentElement.classList.remove('dark')
   }
-
-  const after = html.classList.contains('dark')
-  console.log('applyThemeToDOM:', theme, '| before:', before, '| after:', after, '| classes:', html.className)
 }
 
 export const useThemeStore = create<ThemeState>((set, get) => ({
@@ -50,7 +44,6 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
   toggleTheme: () => {
     const current = get().theme
     const next: Theme = current === 'dark' ? 'light' : 'dark'
-    console.log('Toggle theme:', current, '->', next) // Debug log
     applyThemeToDOM(next)
     try {
       localStorage.setItem('theme', next)
