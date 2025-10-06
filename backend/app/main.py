@@ -292,6 +292,63 @@ async def get_provider_prompting_guides(
 
 # ---- Prompt Optimization ----
 
+# OpenAI's official meta-prompt for prompt optimization
+# Source: https://the-decoder.com/openai-releases-its-meta-prompt-for-prompt-optimization/
+META_PROMPT = """Given a task description or existing prompt, produce a detailed system prompt to guide a language model in completing the task effectively.
+
+# Guidelines
+
+- Understand the Task: Grasp the main objective, goals, requirements, constraints, and expected output.
+- Minimal Changes: If an existing prompt is provided, improve it only if it's simple. For complex prompts, enhance clarity and add missing elements without altering the original structure.
+- Reasoning Before Conclusions: Encourage reasoning steps before any conclusions are reached. ATTENTION! If the user provides examples where the reasoning happens afterward, REVERSE the order! NEVER START EXAMPLES WITH CONCLUSIONS!
+- Reasoning Order: Call out reasoning portions of the prompt and conclusion parts (specific fields by name). For each, determine the ORDER in which this is done, and whether it needs to be reversed.
+- Conclusion, classifications, or results should ALWAYS appear last.
+- Examples: Include high-quality examples if helpful, using placeholders [in brackets] for complex elements.
+- What kinds of examples may need to be included, how many, and whether they are complex enough to benefit from placeholders.
+- Clarity and Conciseness: Use clear, specific language. Avoid unnecessary instructions or bland statements.
+- Formatting: Use markdown features for readability. DO NOT USE ``` CODE BLOCKS UNLESS SPECIFICALLY REQUESTED.
+- Preserve User Content: If the input task or prompt includes extensive guidelines or examples, preserve them entirely, or as closely as possible. If they are vague, consider breaking down into sub-steps. Keep any details, guidelines, examples, variables, or placeholders provided by the user.
+- Constants: DO include constants in the prompt, as they are not susceptible to prompt injection. Such as guides, rubrics, and examples.
+- Output Format: Explicitly the most appropriate output format, in detail. This should include length and syntax (e.g. short sentence, paragraph, JSON, etc.)
+- For tasks outputting well-defined or structured data (classification, JSON, etc.) bias towards outputting a JSON.
+- JSON should never be wrapped in code blocks (```) unless explicitly requested.
+
+The final prompt you output should adhere to the following structure below. Do not include any additional commentary, only output the completed system prompt. SPECIFICALLY, do not include any additional messages at the start or end of the prompt. (e.g. no "---")
+
+[Concise instruction describing the task - this should be the first line in the prompt, no section header]
+
+[Additional details as needed.]
+
+[Optional sections with headings or bullet points for detailed steps.]
+
+# Steps [optional]
+
+[optional: a detailed breakdown of the steps necessary to accomplish the task]
+
+# Output Format
+
+[Specifically call out how the output should be formatted, be it response length, structure e.g. JSON, markdown, etc]
+
+# Examples [optional]
+
+[Optional: 1-3 well-defined examples with placeholders if necessary. Clearly mark where examples start and end, and what the input and output are. User placeholders as necessary.]
+[If the examples are shorter than what a realistic example is expected to be, make a reference with () explaining how real examples should be longer / shorter / different. AND USE PLACEHOLDERS! ]
+
+# Notes [optional]
+
+[optional: edge cases, details, and an area to call or repeat out specific important considerations]
+"""
+
+# Provider-specific optimization hints
+PROVIDER_HINTS = {
+    "anthropic": "Claude models work best with XML-style tags like <instructions>, <context>, <thinking>, and <output>. Use explicit thinking blocks for complex reasoning tasks.",
+    "openai": "GPT models benefit from clear delimiters (triple quotes, <<<>>>), step-by-step instructions, specific role definitions, and explicit output format specifications.",
+    "deepseek": "DeepSeek-R1 models benefit from explicit <think> tags for reasoning tasks. Be explicit about showing work and breaking down complex queries into sequential prompts.",
+    "google": "Gemini models work well with structured sections, explicit role definitions, and grounding passages. Specify token budgets and use numbered outputs.",
+    "xai": "Grok models prefer explicit JSON schemas for structured output, clear role definitions, and tuning one parameter at a time."
+}
+
+
 class OptimizeRequest(BaseModel):
     model: str
     provider: Optional[str] = None
@@ -309,68 +366,87 @@ class OptimizeResponse(BaseModel):
 @app.post("/api/optimize", response_model=OptimizeResponse)
 async def optimize_prompt(req: OptimizeRequest, session: AsyncSession = Depends(get_session)):
     if not os.getenv("OPENROUTER_API_KEY"):
-        # Minimal helpful error
         raise HTTPException(status_code=400, detail="OPENROUTER_API_KEY not set")
 
-    await create_all()
-    # Fetch guide from database
-    guide_row = (await session.execute(
-        select(ProviderContent)
-        .where(ProviderContent.provider_id == (req.provider or "").lower())
-        .where(ProviderContent.content_type == "optimization_guide")
-    )).scalar_one_or_none()
+    # Use OpenAI's meta-prompt as system prompt
+    system_prompt = META_PROMPT
 
-    guide = guide_row.content.get("guide", "Be clear, concise, and explicit.") if guide_row else "Be clear, concise, and explicit."
-    sys = (
-        "You are an expert prompt engineer. Optimize the given {kind} prompt "
-        "for the specified model while preserving the user's intent. Apply the provider's prompting guides. "
-        "Return strictly JSON with keys: optimized (string), changes (string[]), notes (string[])."
-    ).format(kind=req.kind)
+    # Build user message - just the prompt to optimize plus provider context
+    provider_id = (req.provider or "").lower()
+    provider_hint = PROVIDER_HINTS.get(provider_id, "")
 
-    user_parts = [
-        f"PROVIDER_GUIDE:\n{guide}",
-        f"MODEL_ID: {req.model}",
-        f"PROMPT_KIND: {req.kind}",
-    ]
-    if req.system:
-        user_parts.append(f"SYSTEM_CONTEXT:\n{req.system}")
-    user_parts.append(f"ORIGINAL_PROMPT:\n<<<\n{req.prompt}\n>>>")
-    user_parts.append(
-        "Requirements:\n- Keep meaning.\n- Improve clarity and structure.\n- Add delimiters/sections where useful.\n- Suggest JSON format only when helpful."
-    )
-    user_msg = "\n\n".join(user_parts)
+    # Simple, direct message: just the prompt + provider context
+    user_parts = []
 
+    # Add provider-specific guidance as context
+    if provider_hint:
+        user_parts.append(f"Provider context: This prompt will be used with {req.model} ({provider_id}). {provider_hint}")
+        user_parts.append("")
+
+    # Add system context if optimizing a user prompt
+    if req.system and req.kind == "user":
+        user_parts.append(f"System prompt context (for reference only, do not optimize this):")
+        user_parts.append(req.system)
+        user_parts.append("")
+
+    # The actual prompt to optimize
+    user_parts.append(req.prompt)
+
+    user_msg = "\n".join(user_parts)
+
+    # Call the same model to optimize for itself (e.g., Claude optimizes for Claude)
     svc = OpenRouterService()
     payload = await svc.completion(
         model=req.model,
         messages=[
-            {"role": "system", "content": sys},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_msg},
         ],
-        response_format={"type": "json_object"},
-        temperature=0.3,
+        temperature=0.5,  # Slightly higher for creative optimization suggestions
     )
-    content = (
+
+    optimized_prompt = (
         payload.get("choices", [{}])[0]
         .get("message", {})
         .get("content", "")
         .strip()
     )
 
-    try:
-        data = json.loads(content)
-    except Exception:
-        # If not JSON, return as optimized text with a simple note
-        return OptimizeResponse(optimized=content or req.prompt, notes=["Model returned non-JSON output; used raw content."], changes=[])
+    if not optimized_prompt:
+        return OptimizeResponse(
+            optimized=req.prompt,
+            notes=["Optimization failed: empty response from model"],
+            changes=[]
+        )
 
-    optimized = str(data.get("optimized", "")).strip() or req.prompt
-    changes = data.get("changes") or []
-    notes = data.get("notes") or []
-    if not isinstance(changes, list):
-        changes = [str(changes)]
-    if not isinstance(notes, list):
-        notes = [str(notes)]
-    return OptimizeResponse(optimized=optimized, changes=[str(c) for c in changes], notes=[str(n) for n in notes])
+    # Extract changes and notes from comparison
+    changes = []
+    notes = []
+
+    # Simple heuristic: if the optimized prompt is significantly different, note it
+    if len(optimized_prompt) > len(req.prompt) * 1.2:
+        changes.append("Expanded prompt with additional structure and clarity")
+    elif len(optimized_prompt) < len(req.prompt) * 0.8:
+        changes.append("Condensed prompt for clarity")
+    else:
+        changes.append("Refined prompt structure and wording")
+
+    # Check for provider-specific patterns
+    if provider_id == "anthropic" and ("<" in optimized_prompt and ">" in optimized_prompt):
+        notes.append("Added XML-style tags for better structure")
+    elif provider_id == "openai" and ("```" in optimized_prompt or "<<<" in optimized_prompt):
+        notes.append("Added delimiters for clear input/output separation")
+    elif provider_id == "deepseek" and "<think>" in optimized_prompt.lower():
+        notes.append("Added thinking blocks for reasoning tasks")
+
+    if "# " in optimized_prompt or "## " in optimized_prompt:
+        notes.append("Added section headers for organization")
+
+    return OptimizeResponse(
+        optimized=optimized_prompt,
+        changes=changes,
+        notes=notes
+    )
 
 
 # ---- Snapshot Save/Retrieve ----
