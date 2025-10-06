@@ -1,6 +1,5 @@
 # Claude Opus 4.1 - Advanced Debugging and Refactoring Guide
 
-**Last Updated:** January 2025
 
 **Official Documentation:** https://www.anthropic.com/news/claude-opus-4-1
 

@@ -1,6 +1,5 @@
 # OpenAI Prompt Engineering Best Practices
 
-**Last Updated:** January 2025
 
 **Official Documentation:** https://platform.openai.com/docs/guides/prompt-engineering
 

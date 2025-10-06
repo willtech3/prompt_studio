@@ -1,6 +1,5 @@
 # DeepSeek Prompt Engineering Best Practices
 
-**Last Updated:** January 2025
 
 **Official Documentation:** https://docs.together.ai/docs/prompting-deepseek-r1
 

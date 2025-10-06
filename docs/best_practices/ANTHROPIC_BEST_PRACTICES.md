@@ -1,6 +1,5 @@
 # Anthropic Claude Prompt Engineering Best Practices
 
-**Last Updated:** January 2025
 
 **Official Documentation:** https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/overview
 

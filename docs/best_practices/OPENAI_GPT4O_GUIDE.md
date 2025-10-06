@@ -1,6 +1,5 @@
 # GPT-4o Model-Specific Prompting Guide
 
-**Last Updated:** January 2025
 
 **Official Documentation:** https://platform.openai.com/docs/models/gpt-4o
 

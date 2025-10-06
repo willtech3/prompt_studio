@@ -1,6 +1,5 @@
 # Claude Sonnet 4.5 - Agents, Computer Use, and Autonomous Operations Guide
 
-**Last Updated:** January 2025
 
 **Official Documentation:** https://www.anthropic.com/news/claude-sonnet-4-5
 

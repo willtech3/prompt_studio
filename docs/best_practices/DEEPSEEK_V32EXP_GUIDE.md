@@ -1,6 +1,5 @@
 # DeepSeek-V3.2-Exp - Experimental Features Model Guide
 
-**Last Updated:** January 2025
 
 **Official Documentation:** https://api-docs.deepseek.com/
 

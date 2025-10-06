@@ -1,6 +1,5 @@
 # Grok-3 - Balanced General-Purpose Model Guide
 
-**Last Updated:** January 2025
 
 **Official Documentation:** https://docs.x.ai/docs/models
 

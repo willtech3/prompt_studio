@@ -1,6 +1,5 @@
 # Claude 3.7 Sonnet - Hybrid Reasoning Model Guide
 
-**Last Updated:** January 2025
 
 **Official Documentation:** https://www.anthropic.com/news/claude-3-7-sonnet
 

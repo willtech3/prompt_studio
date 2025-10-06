@@ -1,6 +1,5 @@
 # Grok-4-Fast - High-Speed Reasoning Model Guide
 
-**Last Updated:** January 2025
 
 **Official Documentation:** https://x.ai/news/grok-code-fast-1
 

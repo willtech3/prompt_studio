@@ -1,6 +1,5 @@
 # Gemini 2.5 Pro - Multimodal Reasoning and Thinking Guide
 
-**Last Updated:** January 2025
 
 **Official Documentation:** https://deepmind.google/models/gemini/
 

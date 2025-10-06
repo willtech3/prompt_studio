@@ -1,6 +1,5 @@
 # Claude Sonnet 4 - Efficiency and Cost-Performance Guide
 
-**Last Updated:** January 2025
 
 **Official Documentation:** https://www.anthropic.com/news/claude-4
 

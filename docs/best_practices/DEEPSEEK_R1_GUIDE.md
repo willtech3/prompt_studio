@@ -1,6 +1,5 @@
 # DeepSeek-R1 - Extended Reasoning Model Guide
 
-**Last Updated:** January 2025
 
 **Official Documentation:** https://docs.together.ai/docs/prompting-deepseek-r1
 

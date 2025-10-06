@@ -1,6 +1,5 @@
 # GPT-4.1 Model-Specific Prompting Guide
 
-**Last Updated:** January 2025
 
 **Official Documentation:** https://cookbook.openai.com/examples/gpt4-1_prompting_guide
 

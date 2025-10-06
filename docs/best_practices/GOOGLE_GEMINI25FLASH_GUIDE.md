@@ -1,6 +1,5 @@
 # Gemini 2.5 Flash - Speed and Efficiency Guide
 
-**Last Updated:** January 2025
 
 **Official Documentation:** https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash
 

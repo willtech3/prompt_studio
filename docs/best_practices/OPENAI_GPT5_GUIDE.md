@@ -1,7 +1,5 @@
 # GPT-5 Model-Specific Prompting Guide
 
-**Last Updated:** January 2025
-
 **Official Documentation:** https://cookbook.openai.com/examples/gpt-5/gpt-5_prompting_guide
 
 **Model:** `openai/gpt-5`

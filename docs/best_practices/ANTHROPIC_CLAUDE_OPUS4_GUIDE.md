@@ -1,6 +1,5 @@
 # Claude Opus 4 - Best Coding Model Guide
 
-**Last Updated:** January 2025
 
 **Official Documentation:** https://www.anthropic.com/news/claude-4
 

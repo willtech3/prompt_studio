@@ -1,6 +1,5 @@
 # Google Gemini Prompt Engineering Best Practices
 
-**Last Updated:** January 2025
 
 **Official Documentation:** https://ai.google.dev/gemini-api/docs/prompting-strategies
 

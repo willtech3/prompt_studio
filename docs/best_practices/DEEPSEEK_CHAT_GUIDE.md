@@ -1,6 +1,5 @@
 # DeepSeek-Chat - General Conversation Model Guide
 
-**Last Updated:** January 2025
 
 **Official Documentation:** https://api-docs.deepseek.com/
 

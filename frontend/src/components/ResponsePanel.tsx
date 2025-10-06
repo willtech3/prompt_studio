@@ -7,8 +7,7 @@ import { usePromptStore } from '../store/promptStore'
 import { api } from '../services/api'
 import { useToastStore } from '../store/toastStore'
 import { useUIStore } from '../store/uiStore'
-import 'highlight.js/styles/github.css' // Light theme
-import 'highlight.js/styles/github-dark.css' // Dark theme
+import 'highlight.js/styles/github-dark.css' // Dark theme only
 
 export function ResponsePanel() {
   const response = usePromptStore((s) => s.response)

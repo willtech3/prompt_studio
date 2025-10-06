@@ -48,7 +48,7 @@
     margin-bottom: 0.25em;
   }
 
-  /* Code blocks */
+  /* Code blocks - Dark mode only */
   pre {
     margin-top: 1em;
     margin-bottom: 1em;
@@ -57,24 +57,16 @@
     overflow-wrap: break-word;
     white-space: pre-wrap;
     word-break: break-word;
-    background-color: rgb(243 244 246);
+    background-color: #0a0c10 !important;
   }
 
-  :is(.dark &) pre {
-    background-color: rgba(255, 255, 255, 0.05);
-  }
-
-  /* Inline code */
+  /* Inline code - Dark mode only */
   code {
     padding: 0.2em 0.4em;
     border-radius: 0.25em;
     font-size: 0.9em;
-    background-color: rgb(243 244 246);
+    background-color: #0a0c10 !important;
     word-break: break-word;
-  }
-
-  :is(.dark &) code {
-    background-color: rgba(255, 255, 255, 0.1);
   }
 
   /* Code inside pre shouldn't have double background */
@@ -83,20 +75,16 @@
     background-color: transparent;
   }
 
-  /* Blockquotes */
+  /* Blockquotes - Dark mode only */
   blockquote {
     margin-top: 1em;
     margin-bottom: 1em;
     padding-left: 1em;
-    border-left: 3px solid rgb(209 213 219);
+    border-left: 3px solid rgba(255, 255, 255, 0.2);
     font-style: italic;
   }
 
-  :is(.dark &) blockquote {
-    border-left-color: rgba(255, 255, 255, 0.2);
-  }
-
-  /* Tables */
+  /* Tables - Dark mode only */
   table {
     margin-top: 1em;
     margin-bottom: 1em;
@@ -106,41 +94,24 @@
 
   th, td {
     padding: 0.5em;
-    border: 1px solid rgb(229 231 235);
-  }
-
-  :is(.dark &) th,
-  :is(.dark &) td {
-    border-color: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.1);
   }
 
   th {
-    background-color: rgb(249 250 251);
+    background-color: rgba(255, 255, 255, 0.05);
     font-weight: 600;
   }
 
-  :is(.dark &) th {
-    background-color: rgba(255, 255, 255, 0.05);
-  }
-
-  /* Links */
+  /* Links - Dark mode only */
   a {
-    color: rgb(59 130 246);
+    color: rgb(96 165 250);
     text-decoration: underline;
   }
 
-  :is(.dark &) a {
-    color: rgb(96 165 250);
-  }
-
-  /* Horizontal rules */
+  /* Horizontal rules - Dark mode only */
   hr {
     margin-top: 1.5em;
     margin-bottom: 1.5em;
-    border-color: rgb(229 231 235);
-  }
-
-  :is(.dark &) hr {
     border-color: rgba(255, 255, 255, 0.1);
   }
 }

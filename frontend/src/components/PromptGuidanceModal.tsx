@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { X } from 'lucide-react'
+import { X, ChevronDown, ChevronRight } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
@@ -32,11 +32,11 @@ export function PromptGuidanceModal() {
   const close = useUIStore((s) => s.closePromptGuidance)
   const [activeTab, setActiveTab] = useState<Provider>('openai')
   const [selectedModels, setSelectedModels] = useState<Record<Provider, string>>({
-    openai: '',
-    anthropic: '',
-    google: '',
-    xai: '',
-    deepseek: '',
+    openai: 'openai/gpt-5',
+    anthropic: 'anthropic/claude-sonnet-4.5',
+    google: 'google/gemini-2.5-pro',
+    xai: 'x-ai/grok-4',
+    deepseek: 'deepseek/deepseek-chat',
   })
   const [providerData, setProviderData] = useState<Record<Provider, ProviderData>>({
     openai: { general: null, modelSpecific: null },
@@ -53,6 +53,8 @@ export function PromptGuidanceModal() {
     deepseek: [],
   })
   const [loading, setLoading] = useState(true)
+  const [generalExpanded, setGeneralExpanded] = useState(false)
+  const [modelSpecificExpanded, setModelSpecificExpanded] = useState(false)
 
   // Load all provider content and models on mount
   useEffect(() => {
@@ -132,10 +134,13 @@ export function PromptGuidanceModal() {
     return () => { cancelled = true }
   }, [open])
 
-  // Fetch model-specific guidance when a model is selected
+  // Fetch model-specific guidance when a model is selected or tab changes
   useEffect(() => {
     const selectedModel = selectedModels[activeTab]
     if (!selectedModel || !open) return
+
+    // Skip if we already have this model's data
+    if (providerData[activeTab]?.modelSpecific?.[selectedModel]) return
 
     let cancelled = false
     ;(async () => {
@@ -163,7 +168,7 @@ export function PromptGuidanceModal() {
     })()
 
     return () => { cancelled = true }
-  }, [selectedModels, activeTab, open])
+  }, [selectedModels, activeTab, open, providerData])
 
   if (!open) return null
 
@@ -174,57 +179,62 @@ export function PromptGuidanceModal() {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="w-[min(1200px,95vw)] h-[min(900px,90vh)] bg-white dark:bg-gray-950 rounded-xl border border-gray-200 dark:border-white/10 shadow-xl overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="h-14 flex items-center justify-between px-6 border-b border-gray-200 dark:border-white/10">
-          <h2 className="text-lg font-semibold">Prompt Guidance</h2>
-          <button
-            onClick={close}
-            className="rounded-md p-2 border border-gray-300 dark:border-white/15 hover:bg-gray-100 dark:hover:bg-white/10"
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex border-b border-gray-200 dark:border-white/10 px-6">
-          {PROVIDERS.map(({ id, label }) => (
+      <div className="w-[min(1200px,95vw)] h-[min(900px,90vh)] bg-[#1a1d29] rounded-xl border border-white/10 shadow-xl overflow-hidden flex flex-col">
+        {/* Header with Tabs */}
+        <div className="bg-gray-950 border-b border-white/10">
+          {/* Title and Close */}
+          <div className="h-14 flex items-center justify-between px-6">
+            <h2 className="text-lg font-semibold text-white">Prompt Guidance</h2>
             <button
-              key={id}
-              onClick={() => setActiveTab(id)}
-              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === id
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
-              }`}
+              onClick={close}
+              className="rounded-md p-2 border border-white/15 hover:bg-white/10 text-white"
+              aria-label="Close"
             >
-              {label}
+              <X className="h-4 w-4" />
             </button>
-          ))}
+          </div>
+
+          {/* Tabs */}
+          <div className="flex px-6">
+            {PROVIDERS.map(({ id, label }) => (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === id
+                    ? 'border-blue-400 text-blue-400 bg-white/5'
+                    : 'border-transparent text-gray-400 hover:text-gray-200 hover:bg-white/5'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto bg-[#1a1d29]">
           {loading ? (
             <div className="flex items-center justify-center h-full">
-              <div className="text-gray-500 dark:text-gray-400">Loading...</div>
+              <div className="text-gray-400">Loading...</div>
             </div>
           ) : activeContent ? (
             <div className="p-6 max-w-4xl mx-auto">
               {/* Model Selector */}
               <div className="mb-6">
-                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">
-                  Model-Specific Guidance (Optional)
+                <label className="block text-xs font-medium text-gray-400 mb-2">
+                  Select Model
                 </label>
                 <select
                   value={selectedModels[activeTab]}
-                  onChange={(e) =>
+                  onChange={(e) => {
                     setSelectedModels((prev) => ({ ...prev, [activeTab]: e.target.value }))
-                  }
-                  className="w-full max-w-sm px-3 py-2 text-sm rounded-md border border-gray-300 dark:border-white/15 bg-white dark:bg-gray-900 hover:border-gray-400 dark:hover:border-white/25 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    if (e.target.value) {
+                      setModelSpecificExpanded(true)
+                    }
+                  }}
+                  className="w-full max-w-sm px-3 py-2 text-sm rounded-md border border-white/15 bg-[#0f1117] text-white hover:border-white/25 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="">Select a model for additional guidance...</option>
                   {providerModels[activeTab].map((model) => (
                     <option key={model.id} value={model.id}>
                       {model.name || model.id}
@@ -233,64 +243,71 @@ export function PromptGuidanceModal() {
                 </select>
               </div>
 
-              {/* Official Documentation Link (at top) */}
-              {activeContent.docPath && (
-                <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
-                  <a
-                    href={activeContent.docPath}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:underline"
-                  >
-                    📚 Official Documentation ↗
-                  </a>
-                </div>
-              )}
-
-              {/* Provider Guidance Content */}
-              <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:font-semibold prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg prose-h4:text-base prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-code:text-sm prose-code:bg-gray-100 dark:prose-code:bg-gray-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-pre:bg-gray-900 dark:prose-pre:bg-gray-950 prose-pre:border prose-pre:border-gray-700">
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  rehypePlugins={[rehypeHighlight]}
+              {/* General Provider Guidance - Collapsible */}
+              <div className="mb-6">
+                <button
+                  onClick={() => setGeneralExpanded(!generalExpanded)}
+                  className="w-full flex items-center justify-between p-4 bg-[#0f1117] hover:bg-[#14161f] rounded-lg border border-white/10 transition-colors mb-2"
                 >
-                  {activeContent.markdown}
-                </ReactMarkdown>
+                  <h3 className="text-base font-semibold text-white">
+                    General {PROVIDERS.find(p => p.id === activeTab)?.label} Best Practices
+                  </h3>
+                  {generalExpanded ? (
+                    <ChevronDown className="h-5 w-5 text-gray-400" />
+                  ) : (
+                    <ChevronRight className="h-5 w-5 text-gray-400" />
+                  )}
+                </button>
+
+                {generalExpanded && (
+                  <div className="p-4">
+                    <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:font-semibold prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg prose-h4:text-base prose-a:text-blue-400 prose-code:text-sm prose-code:bg-[#0a0c10] prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-pre:bg-[#0a0c10] prose-pre:border-0">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[rehypeHighlight]}
+                      >
+                        {activeContent.markdown}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* Model-Specific Guidance (if selected) */}
+              {/* Model-Specific Guidance - Collapsible */}
               {activeModelContent && (
-                <div className="mt-8 pt-8 border-t-2 border-blue-200 dark:border-blue-800">
-                  <h3 className="text-lg font-semibold mb-4 text-blue-600 dark:text-blue-400">
-                    🎯 Model-Specific Guidance: {selectedModels[activeTab]}
-                  </h3>
+                <div className="mb-6">
+                  <button
+                    onClick={() => setModelSpecificExpanded(!modelSpecificExpanded)}
+                    className="w-full flex items-center justify-between p-4 bg-[#0f1117] hover:bg-[#14161f] rounded-lg border border-white/10 transition-colors mb-2"
+                  >
+                    <h3 className="text-base font-semibold text-white">
+                      {providerModels[activeTab].find(m => m.id === selectedModels[activeTab])?.name || selectedModels[activeTab].split('/').pop()} Specific Guidance
+                    </h3>
+                    {modelSpecificExpanded ? (
+                      <ChevronDown className="h-5 w-5 text-gray-400" />
+                    ) : (
+                      <ChevronRight className="h-5 w-5 text-gray-400" />
+                    )}
+                  </button>
 
-                  {activeModelContent.docPath && (
-                    <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
-                      <a
-                        href={activeModelContent.docPath}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:underline"
-                      >
-                        📚 Model Documentation ↗
-                      </a>
+                  {modelSpecificExpanded && (
+                    <div className="p-4">
+                      <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:font-semibold prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg prose-h4:text-base prose-a:text-blue-400 prose-code:text-sm prose-code:bg-[#0a0c10] prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-pre:bg-[#0a0c10] prose-pre:border-0">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          rehypePlugins={[rehypeHighlight]}
+                        >
+                          {activeModelContent.markdown}
+                        </ReactMarkdown>
+                      </div>
                     </div>
                   )}
-
-                  <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:font-semibold prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg prose-h4:text-base prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-code:text-sm prose-code:bg-gray-100 dark:prose-code:bg-gray-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-pre:bg-gray-900 dark:prose-pre:bg-gray-950 prose-pre:border prose-pre:border-gray-700">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      rehypePlugins={[rehypeHighlight]}
-                    >
-                      {activeModelContent.markdown}
-                    </ReactMarkdown>
-                  </div>
                 </div>
               )}
             </div>
           ) : (
             <div className="flex items-center justify-center h-full">
-              <div className="text-gray-500 dark:text-gray-400">No content available</div>
+              <div className="text-gray-400">No content available</div>
             </div>
           )}
         </div>

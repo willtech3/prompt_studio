@@ -1,6 +1,5 @@
 # Grok-4 - Advanced Reasoning Model Guide
 
-**Last Updated:** January 2025
 
 **Official Documentation:** https://docs.x.ai/docs/models/grok-4-0709
 
