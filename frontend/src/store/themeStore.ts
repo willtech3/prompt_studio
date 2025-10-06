@@ -21,11 +21,17 @@ function getInitialTheme(): Theme {
 }
 
 function applyThemeToDOM(theme: Theme) {
+  const html = document.documentElement
+  const before = html.classList.contains('dark')
+
   if (theme === 'dark') {
-    document.documentElement.classList.add('dark')
+    html.classList.add('dark')
   } else {
-    document.documentElement.classList.remove('dark')
+    html.classList.remove('dark')
   }
+
+  const after = html.classList.contains('dark')
+  console.log('applyThemeToDOM:', theme, '| before:', before, '| after:', after, '| classes:', html.className)
 }
 
 export const useThemeStore = create<ThemeState>((set, get) => ({
@@ -33,13 +39,24 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
 
   setTheme: (theme: Theme) => {
     applyThemeToDOM(theme)
+    try {
+      localStorage.setItem('theme', theme)
+    } catch (e) {
+      console.error('Failed to save theme to localStorage:', e)
+    }
     set({ theme })
   },
 
   toggleTheme: () => {
     const current = get().theme
     const next: Theme = current === 'dark' ? 'light' : 'dark'
+    console.log('Toggle theme:', current, '->', next) // Debug log
     applyThemeToDOM(next)
+    try {
+      localStorage.setItem('theme', next)
+    } catch (e) {
+      console.error('Failed to save theme to localStorage:', e)
+    }
     set({ theme: next })
   },
 }))
