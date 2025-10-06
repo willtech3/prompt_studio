@@ -102,6 +102,39 @@ prompt_studio/
 4. Integration and refinement
 5. Advanced features incrementally
 
+## Common Development Commands (via justfile)
+
+The backend includes a `justfile` with common development commands. **Always use these commands** instead of running tools directly:
+
+```bash
+# Navigate to backend directory first
+cd backend
+
+# Start/stop server
+just start          # Start FastAPI dev server
+just stop           # Stop running server
+
+# Testing & quality
+just test           # Run tests with coverage
+just lint           # Run ruff linting
+just format         # Format code with black
+just typecheck      # Run mypy type checking
+
+# Database
+just migrate        # Run pending migrations
+just migration "description"  # Create new migration
+just seed           # Seed provider content
+
+# Dependencies
+just sync           # Install/sync dependencies
+
+# Utilities
+just health         # Check API health
+just models         # List available models
+```
+
+All commands use `uv run` internally, so you never need to manually activate the virtual environment.
+
 ## Success Metrics
 - **Technical**: < 2s page load, < 200ms API response (excluding AI calls)
 - **User**: Successfully execute prompts, save/load prompts, compare models
@@ -126,8 +159,9 @@ prompt_studio/
 - Preferred authentication method (email/password, OAuth, both)?
 
 ## 🚨 NON-NEGOTIABLE RULES
-1. **ALWAYS activate the uv virtual environment FIRST** - Never run any Python commands without ensuring the uv venv is active
-2. **NEVER use `git commit .`** - Always add files individually with `git add <specific-file>` to avoid committing unintended files
+1. **USE JUSTFILE COMMANDS** - Always use commands from `backend/justfile` for Python/API development tasks (start, stop, test, lint, format, etc.) instead of running commands directly
+2. **USE UV RUN** - If justfile doesn't have a command you need, use `uv run` instead of activating venv manually (e.g., `uv run uvicorn`, `uv run pytest`)
+3. **NEVER use `git commit .`** - Always add files individually with `git add <specific-file>` to avoid committing unintended files
 
 ## Technical Notes
 - Use async/await for consistency (not for premature optimization)

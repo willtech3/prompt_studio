@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 # Import Base and models
 from config.db import Base, settings
-from models import User, Prompt, ModelConfig, Execution, OpenRouterModel, Snapshot
+from models import User, ModelConfig, Snapshot, ProviderContent
 
 # All models now use a single Base class
 target_metadata = Base.metadata

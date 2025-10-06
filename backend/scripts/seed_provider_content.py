@@ -1,4 +1,4 @@
-"""Seed provider content from hardcoded data in codebase."""
+"""Seed provider content from markdown files in docs/best_practices/."""
 import asyncio
 import sys
 from pathlib import Path
@@ -10,6 +10,43 @@ from config.db import get_database_url, init_engine
 from models.provider_content import ProviderContent
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+# Path to best practices documentation
+DOCS_DIR = Path(__file__).resolve().parents[2] / "docs" / "best_practices"
+
+# Model ID mappings (model_id from OpenRouter to documentation filename)
+MODEL_MAPPINGS = {
+    # OpenAI
+    "openai/gpt-4.1": "OPENAI_GPT41_GUIDE.md",
+    "openai/gpt-4o": "OPENAI_GPT4O_GUIDE.md",
+    "openai/gpt-5": "OPENAI_GPT5_GUIDE.md",
+    # Anthropic
+    "anthropic/claude-3.7-sonnet": "ANTHROPIC_CLAUDE37SONNET_GUIDE.md",
+    "anthropic/claude-opus-4": "ANTHROPIC_CLAUDE_OPUS4_GUIDE.md",
+    "anthropic/claude-opus-4.1": "ANTHROPIC_CLAUDE_OPUS41_GUIDE.md",
+    "anthropic/claude-sonnet-4": "ANTHROPIC_CLAUDE_SONNET4_GUIDE.md",
+    "anthropic/claude-sonnet-4.5": "ANTHROPIC_CLAUDE_SONNET45_GUIDE.md",
+    # Google
+    "google/gemini-2.5-flash": "GOOGLE_GEMINI25FLASH_GUIDE.md",
+    "google/gemini-2.5-pro": "GOOGLE_GEMINI25PRO_GUIDE.md",
+    # xAI
+    "x-ai/grok-3": "XAI_GROK3_GUIDE.md",
+    "x-ai/grok-4": "XAI_GROK4_GUIDE.md",
+    "x-ai/grok-4-fast": "XAI_GROK4FAST_GUIDE.md",
+    # DeepSeek
+    "deepseek/deepseek-chat": "DEEPSEEK_CHAT_GUIDE.md",
+    "deepseek/deepseek-r1": "DEEPSEEK_R1_GUIDE.md",
+    "deepseek/deepseek-v3.2-exp": "DEEPSEEK_V32EXP_GUIDE.md",
+}
+
+# Provider best practices filenames
+PROVIDER_FILES = {
+    "openai": "OPENAI_BEST_PRACTICES.md",
+    "anthropic": "ANTHROPIC_BEST_PRACTICES.md",
+    "google": "GOOGLE_BEST_PRACTICES.md",
+    "xai": "XAI_BEST_PRACTICES.md",
+    "deepseek": "DEEPSEEK_BEST_PRACTICES.md",
+}
 
 
 # Optimization guides from app/main.py PROVIDER_GUIDES
@@ -185,8 +222,29 @@ BEST_PRACTICES = {
 }
 
 
+def extract_doc_url(content: str) -> str:
+    """Extract official documentation URL from markdown content."""
+    lines = content.split('\n')
+    for line in lines:
+        if line.startswith('**Official Documentation:**'):
+            # Extract URL from markdown link format
+            url_start = line.find('https://')
+            if url_start != -1:
+                return line[url_start:].strip()
+    return ""
+
+
+def extract_title(content: str) -> str:
+    """Extract title from first markdown heading."""
+    lines = content.split('\n')
+    for line in lines:
+        if line.startswith('# '):
+            return line[2:].strip()
+    return "Best Practices"
+
+
 async def seed_provider_content():
-    """Seed provider content table with optimization guides and best practices."""
+    """Seed provider content table from markdown files."""
     if not get_database_url():
         print("DATABASE_URL not configured, skipping seed")
         return
@@ -199,40 +257,69 @@ async def seed_provider_content():
     sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
 
     async with sessionmaker() as session:
-        # Check if data already exists
+        # Delete existing data to reseed with new markdown-based content
         existing = (await session.execute(select(ProviderContent))).scalars().all()
         if existing:
-            print(f"Found {len(existing)} existing provider content records. Skipping seed.")
-            return
+            print(f"Found {len(existing)} existing provider content records. Deleting...")
+            for record in existing:
+                await session.delete(record)
+            await session.commit()
+            print(f"✓ Deleted {len(existing)} old records")
 
-        print("Seeding provider content...")
+        print("\nSeeding provider content from markdown files...")
 
-        # Seed optimization guides
-        for provider_id, content_text in OPTIMIZATION_GUIDES.items():
+        # Seed provider-level best practices
+        for provider_id, filename in PROVIDER_FILES.items():
+            filepath = DOCS_DIR / filename
+            if not filepath.exists():
+                print(f"  ⚠️  Warning: {filename} not found, skipping")
+                continue
+
+            content = filepath.read_text(encoding='utf-8')
+            doc_url = extract_doc_url(content)
+            title = extract_title(content)
+
             record = ProviderContent(
                 provider_id=provider_id,
-                content_type="optimization_guide",
-                title=None,
-                content={"guide": content_text},
-                doc_url=None,
-            )
-            session.add(record)
-            print(f"  Added optimization guide for {provider_id}")
-
-        # Seed best practices
-        for provider_id, bp_data in BEST_PRACTICES.items():
-            record = ProviderContent(
-                provider_id=provider_id,
+                model_id=None,  # Provider-level guidance
                 content_type="best_practice",
-                title=bp_data["title"],
-                content=bp_data["content"],
-                doc_url=bp_data["doc_url"],
+                title=title,
+                content={"markdown": content},
+                doc_url=doc_url,
             )
             session.add(record)
-            print(f"  Added best practices for {provider_id}")
+            print(f"  ✓ Added provider best practices: {provider_id}")
+
+        # Seed model-specific guides
+        for model_id, filename in MODEL_MAPPINGS.items():
+            filepath = DOCS_DIR / filename
+            if not filepath.exists():
+                print(f"  ⚠️  Warning: {filename} not found, skipping")
+                continue
+
+            content = filepath.read_text(encoding='utf-8')
+            doc_url = extract_doc_url(content)
+            title = extract_title(content)
+
+            # Extract provider_id from model_id (e.g., "openai/gpt-4.1" -> "openai")
+            provider_id = model_id.split('/')[0]
+            # Normalize xai provider
+            if provider_id == "x-ai":
+                provider_id = "xai"
+
+            record = ProviderContent(
+                provider_id=provider_id,
+                model_id=model_id,
+                content_type="model_guide",
+                title=title,
+                content={"markdown": content},
+                doc_url=doc_url,
+            )
+            session.add(record)
+            print(f"  ✓ Added model guide: {model_id}")
 
         await session.commit()
-        print("✓ Provider content seeded successfully")
+        print(f"\n✓ Provider content seeded successfully ({len(PROVIDER_FILES)} providers, {len(MODEL_MAPPINGS)} models)")
 
 
 if __name__ == "__main__":

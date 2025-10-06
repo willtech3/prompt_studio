@@ -1,0 +1,51 @@
+# Prompt Studio Backend - Development Commands
+# All commands use 'uv run' to automatically handle the virtual environment
+
+# Start the FastAPI development server
+start:
+    uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+
+# Stop the FastAPI development server
+stop:
+    @pkill -f "uvicorn app.main:app" || echo "No server running"
+
+# Run all tests with coverage
+test:
+    uv run pytest tests/ -v --cov=app
+
+# Run linting with ruff
+lint:
+    uv run ruff check app/ tests/
+
+# Format code with black
+format:
+    uv run black app/ tests/
+
+# Run type checking with mypy
+typecheck:
+    uv run mypy app/
+
+# Run database migrations
+migrate:
+    uv run alembic upgrade head
+
+# Create a new database migration
+migration name:
+    uv run alembic revision --autogenerate -m "{{name}}"
+
+# Seed provider content into database
+seed:
+    uv run python scripts/seed_provider_content.py
+
+# Install/sync dependencies
+sync:
+    uv sync
+
+# Show available models (requires API running)
+models:
+    curl http://127.0.0.1:8000/api/models
+
+# Health check (requires API running)
+health:
+    curl http://127.0.0.1:8000/health
+

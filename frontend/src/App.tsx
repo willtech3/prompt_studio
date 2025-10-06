@@ -9,7 +9,7 @@ import { useUIStore } from './store/uiStore'
 import { SettingsContent } from './components/SettingsContent'
 import { UserSettingsScreen } from './components/UserSettingsScreen'
 import { HistoryPanel } from './components/HistoryPanel'
-import { BestPracticesModal } from './components/BestPracticesModal'
+import { PromptGuidanceModal } from './components/PromptGuidanceModal'
 import { PanelLeft, Settings2 } from 'lucide-react'
 
 export default function App() {
@@ -24,7 +24,7 @@ export default function App() {
     <SettingsSheet />
     <LeftDrawer />
     <UserSettingsScreen />
-    <BestPracticesModal />
+    <PromptGuidanceModal />
     <ToastContainer />
     </>
   )

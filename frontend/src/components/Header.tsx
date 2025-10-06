@@ -1,8 +1,9 @@
-import { SlidersHorizontal } from 'lucide-react'
+import { SlidersHorizontal, BookOpen } from 'lucide-react'
 import { useUIStore } from '../store/uiStore'
 
 export function Header() {
   const openUserSettings = useUIStore((s) => s.openUserSettings)
+  const openPromptGuidance = useUIStore((s) => s.openPromptGuidance)
 
   return (
     <header className="sticky top-0 z-20 border-b border-gray-200/70 dark:border-white/10 backdrop-blur bg-white/70 dark:bg-gray-950/60">
@@ -12,6 +13,13 @@ export function Header() {
           <span className="font-semibold">Prompt Engineering Studio</span>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={openPromptGuidance}
+            className="inline-flex items-center gap-2 rounded-md border border-gray-300 dark:border-white/15 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/10"
+          >
+            <BookOpen className="h-4 w-4" />
+            Prompt Guidance
+          </button>
           <button
             onClick={openUserSettings}
             className="inline-flex items-center gap-2 rounded-md border border-gray-300 dark:border-white/15 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/10"

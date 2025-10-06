@@ -18,6 +18,7 @@ class ProviderContent(Base):
     id: Mapped[uuid_pkg.UUID] = mapped_column(primary_key=True, default=uuid_pkg.uuid4)
     provider_id: Mapped[str] = mapped_column(String(32), index=True)  # 'openai', 'anthropic', etc.
     content_type: Mapped[str] = mapped_column(String(50), index=True)  # 'optimization_guide', 'best_practice'
+    model_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)  # 'gpt-4o', 'claude-opus-4', null for general
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     content: Mapped[dict] = mapped_column(JSONB)  # Flexible JSON structure
     doc_url: Mapped[str | None] = mapped_column(String(500), nullable=True)

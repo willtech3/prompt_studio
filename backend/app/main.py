@@ -151,10 +151,13 @@ async def stream_chat(
 
         try:
             async for chunk in svc.stream_completion(model=model, messages=messages, **params):
-                yield f"data: {chunk}\n\n"
+                # Wrap chunk in JSON format expected by frontend
+                yield f"data: {json.dumps({'content': chunk})}\n\n"
+            # Send done signal
+            yield f"data: {json.dumps({'done': True})}\n\n"
         except Exception as e:
             # Minimal error surfacing
-            yield f"data: [error] {str(e)}\n\n"
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
         finally:
             await svc.close()
 
@@ -242,23 +245,49 @@ async def get_provider_guide(provider_id: str, session: AsyncSession = Depends(g
 
 
 @app.get("/api/providers/{provider_id}/best-practices")
-async def get_provider_best_practices(provider_id: str, session: AsyncSession = Depends(get_session)):
-    """Return best practices for a provider."""
+async def get_provider_best_practices(
+    provider_id: str,
+    model_id: Optional[str] = Query(None, description="Optional model ID for model-specific guidance"),
+    session: AsyncSession = Depends(get_session)
+):
+    """Return best practices for a provider, optionally filtered by model."""
     await create_all()
-    row = (await session.execute(
+
+    # Build query for general provider guidance (model_id IS NULL)
+    query = (
         select(ProviderContent)
         .where(ProviderContent.provider_id == provider_id)
-        .where(ProviderContent.content_type == "best_practice")
-    )).scalar_one_or_none()
+        .where(ProviderContent.model_id.is_(None))
+    )
 
-    if not row:
+    general_row = (await session.execute(query)).scalar_one_or_none()
+
+    if not general_row:
         raise HTTPException(status_code=404, detail="Provider best practices not found")
 
-    return {
-        "title": row.title,
-        "content": row.content,
-        "doc_url": row.doc_url
+    result = {
+        "title": general_row.title,
+        "content": general_row.content,
+        "doc_url": general_row.doc_url
     }
+
+    # If model_id provided, fetch and append model-specific guidance
+    if model_id:
+        model_query = (
+            select(ProviderContent)
+            .where(ProviderContent.provider_id == provider_id)
+            .where(ProviderContent.model_id == model_id)
+        )
+        model_row = (await session.execute(model_query)).scalar_one_or_none()
+
+        if model_row:
+            result["model_specific"] = {
+                "title": model_row.title,
+                "content": model_row.content,
+                "doc_url": model_row.doc_url
+            }
+
+    return result
 
 
 # ---- Prompt Optimization ----

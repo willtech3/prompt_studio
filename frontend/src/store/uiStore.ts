@@ -17,9 +17,9 @@ interface UIState {
   openUserSettings: () => void
   closeUserSettings: () => void
   toggleUserSettings: () => void
-  bestPracticesOpen: boolean
-  openBestPractices: () => void
-  closeBestPractices: () => void
+  promptGuidanceOpen: boolean
+  openPromptGuidance: () => void
+  closePromptGuidance: () => void
 }
 
 export const useUIStore = create<UIState>((set, get) => ({
@@ -39,7 +39,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   openUserSettings: () => set({ userSettingsOpen: true }),
   closeUserSettings: () => set({ userSettingsOpen: false }),
   toggleUserSettings: () => set({ userSettingsOpen: !get().userSettingsOpen }),
-  bestPracticesOpen: false,
-  openBestPractices: () => set({ bestPracticesOpen: true }),
-  closeBestPractices: () => set({ bestPracticesOpen: false }),
+  promptGuidanceOpen: false,
+  openPromptGuidance: () => set({ promptGuidanceOpen: true }),
+  closePromptGuidance: () => set({ promptGuidanceOpen: false }),
 }))
