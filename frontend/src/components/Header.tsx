@@ -1,6 +1,7 @@
 import { SlidersHorizontal, BookOpen, Sun, Moon } from 'lucide-react'
 import { useUIStore } from '../store/uiStore'
 import { useThemeStore } from '../store/themeStore'
+import { Logo } from './Logo'
 
 export function Header() {
   const openUserSettings = useUIStore((s) => s.openUserSettings)
@@ -12,7 +13,7 @@ export function Header() {
     <header className="sticky top-0 z-20 border-b border-gray-200/70 dark:border-white/10 backdrop-blur bg-white/70 dark:bg-gray-950/60">
       <div className="h-14 flex items-center justify-between gap-3 px-4">
         <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-gradient-to-tr from-blue-500 to-indigo-500 shadow" />
+          <Logo size="md" />
           <span className="font-semibold">Prompt Engineering Studio</span>
         </div>
         <div className="flex items-center gap-2">
