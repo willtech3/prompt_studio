@@ -5,6 +5,7 @@ import os
 from typing import Optional
 
 from services.openrouter import OpenRouterService
+from services.tool_executor import ToolExecutor
 from dotenv import load_dotenv
 from pathlib import Path
 import json
@@ -77,6 +78,10 @@ async def stream_chat(
     max_tokens: Optional[int] = Query(None, ge=1, description="Max tokens for completion"),
     top_p: Optional[float] = Query(1.0, ge=0, le=1, description="Nucleus sampling"),
     reasoning_effort: Optional[str] = Query(None, description="Reasoning effort: low|medium|high"),
+    # Tool calling parameters
+    tools: Optional[str] = Query(None, description="JSON-encoded array of tool schemas (OpenAI format)"),
+    tool_choice: Optional[str] = Query("auto", description="Tool choice: 'auto', 'required', 'none', or tool name"),
+    max_tool_calls: int = Query(5, ge=1, le=20, description="Maximum tool call iterations to prevent infinite loops"),
     # Additional tunable parameters (pass-through when provided)
     top_k: Optional[int] = Query(None, description="Top-K sampling"),
     frequency_penalty: Optional[float] = Query(None, description="Frequency penalty"),
@@ -113,6 +118,7 @@ async def stream_chat(
                 # Minimal: if we can't fetch model config, proceed without max_tokens
                 pass
 
+        # Build initial messages
         messages = []
         if system:
             messages.append({"role": "system", "content": system})
@@ -121,7 +127,23 @@ async def stream_chat(
         else:
             messages.append({"role": "user", "content": "Hello"})
 
+        # Parse tool schemas if provided
+        tool_schemas = None
+        if tools:
+            try:
+                tool_schemas = json.loads(tools)
+                if not isinstance(tool_schemas, list):
+                    yield f"data: {json.dumps({'error': 'Tools must be a JSON array'})}\n\n"
+                    return
+            except json.JSONDecodeError as e:
+                yield f"data: {json.dumps({'error': f'Invalid tools JSON: {str(e)}'})}\n\n"
+                return
+
+        # Initialize services
         svc = OpenRouterService()
+        tool_executor = ToolExecutor() if tool_schemas else None
+        
+        # Build base parameters
         params = {"temperature": temperature, "top_p": top_p}
         if effective_max_tokens is not None:
             params["max_tokens"] = effective_max_tokens
@@ -166,14 +188,95 @@ async def stream_chat(
                 pass
 
         try:
-            async for chunk in svc.stream_completion(model=model, messages=messages, **params):
-                # Wrap chunk in JSON format expected by frontend
-                yield f"data: {json.dumps({'content': chunk})}\n\n"
+            # Tool calling loop
+            if tool_schemas and tool_executor:
+                iteration = 0
+                while iteration < max_tool_calls:
+                    iteration += 1
+                    
+                    # Add tools to params for this iteration
+                    call_params = params.copy()
+                    call_params["tools"] = tool_schemas
+                    call_params["tool_choice"] = tool_choice if iteration == 1 else "auto"
+                    
+                    # Call model (non-streaming for tool use)
+                    response = await svc.completion(
+                        model=model,
+                        messages=messages,
+                        **call_params
+                    )
+                    
+                    message = response.get("choices", [{}])[0].get("message", {})
+                    
+                    # Check if model wants to call tools
+                    if tool_calls := message.get("tool_calls"):
+                        # Notify frontend about tool calls
+                        tool_call_info = []
+                        for tc in tool_calls:
+                            tool_call_info.append({
+                                "id": tc.get("id", "unknown"),
+                                "name": tc["function"]["name"],
+                                "arguments": tc["function"]["arguments"]
+                            })
+                        
+                        yield f"data: {json.dumps({'type': 'tool_calls', 'calls': tool_call_info})}\n\n"
+                        
+                        # Add assistant message with tool calls to conversation history
+                        messages.append(message)
+                        
+                        # Execute each tool
+                        for tool_call in tool_calls:
+                            func_name = tool_call["function"]["name"]
+                            func_args_str = tool_call["function"]["arguments"]
+                            
+                            # Notify that we're executing
+                            yield f"data: {json.dumps({'type': 'tool_executing', 'name': func_name})}\n\n"
+                            
+                            # Parse arguments
+                            try:
+                                func_args = json.loads(func_args_str)
+                            except json.JSONDecodeError:
+                                func_args = {}
+                            
+                            # Execute tool
+                            result = await tool_executor.execute(func_name, func_args)
+                            
+                            # Send tool result to frontend
+                            yield f"data: {json.dumps({'type': 'tool_result', 'name': func_name, 'result': result})}\n\n"
+                            
+                            # Add tool result to conversation
+                            messages.append({
+                                "role": "tool",
+                                "tool_call_id": tool_call.get("id", "unknown"),
+                                "content": json.dumps(result)
+                            })
+                        
+                        # Continue loop - model will process tool results
+                        continue
+                    else:
+                        # Model provided final answer without tools
+                        content = message.get("content", "")
+                        if content:
+                            # Stream the final content
+                            yield f"data: {json.dumps({'type': 'content', 'content': content})}\n\n"
+                        break
+                
+                # If we hit max iterations
+                if iteration >= max_tool_calls:
+                    yield f"data: {json.dumps({'type': 'warning', 'message': f'Reached maximum tool call iterations ({max_tool_calls})'})}\n\n"
+            
+            else:
+                # Regular streaming without tools
+                async for chunk in svc.stream_completion(model=model, messages=messages, **params):
+                    # Wrap chunk in JSON format expected by frontend
+                    yield f"data: {json.dumps({'type': 'content', 'content': chunk})}\n\n"
+            
             # Send done signal
-            yield f"data: {json.dumps({'done': True})}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'done': True})}\n\n"
+            
         except Exception as e:
             # Minimal error surfacing
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
         finally:
             await svc.close()
 
