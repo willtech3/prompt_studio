@@ -2,12 +2,20 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import { useRef, useState } from 'react'
-import { Copy, Save as SaveIcon, Settings2, Sparkles, Square } from 'lucide-react'
+import { Copy, Save as SaveIcon, Settings2, Sparkles, Square, Wrench, CheckCircle, Loader2, XCircle } from 'lucide-react'
 import { usePromptStore } from '../store/promptStore'
 import { api } from '../services/api'
 import { useToastStore } from '../store/toastStore'
 import { useUIStore } from '../store/uiStore'
 import 'highlight.js/styles/github-dark.css' // Dark theme only
+
+interface ToolExecution {
+  id: string
+  name: string
+  arguments: string
+  result?: any
+  status: 'pending' | 'executing' | 'completed' | 'error'
+}
 
 export function ResponsePanel() {
   const response = usePromptStore((s) => s.response)
@@ -26,10 +34,12 @@ export function ResponsePanel() {
   const toggleSettings = useUIStore((s) => s.toggleSettings)
   
   const currentStream = useRef<EventSource | null>(null)
+  const [toolExecutions, setToolExecutions] = useState<ToolExecution[]>([])
 
   const onGenerate = () => {
     if (isStreaming) return
     setResponse('')
+    setToolExecutions([])
     addHistoryEntry()
     setIsStreaming(true)
 
@@ -67,13 +77,65 @@ export function ResponsePanel() {
     es.addEventListener('message', (e) => {
       try {
         const parsed = JSON.parse(e.data)
-        if (parsed.done) {
+        
+        // Handle different message types
+        if (parsed.type === 'tool_calls') {
+          // Model wants to call tools
+          const executions: ToolExecution[] = parsed.calls.map((call: any) => ({
+            id: call.id,
+            name: call.name,
+            arguments: call.arguments,
+            status: 'pending' as const,
+          }))
+          setToolExecutions(executions)
+        } 
+        else if (parsed.type === 'tool_executing') {
+          // Tool is being executed
+          setToolExecutions(prev => 
+            prev.map(te => 
+              te.name === parsed.name 
+                ? { ...te, status: 'executing' as const }
+                : te
+            )
+          )
+        } 
+        else if (parsed.type === 'tool_result') {
+          // Tool execution completed
+          setToolExecutions(prev => 
+            prev.map(te => 
+              te.name === parsed.name 
+                ? { 
+                    ...te, 
+                    result: parsed.result,
+                    status: parsed.result.success === false ? 'error' as const : 'completed' as const
+                  }
+                : te
+            )
+          )
+        } 
+        else if (parsed.type === 'content') {
+          // Regular content
+          appendResponse(parsed.content)
+        }
+        else if (parsed.type === 'done' || parsed.done) {
+          // Stream complete
           setIsStreaming(false)
           if (currentStream.current) {
             api.stopStream(currentStream.current)
             currentStream.current = null
           }
-        } else if (parsed.content) {
+        }
+        else if (parsed.type === 'error') {
+          // Error occurred
+          appendResponse(`\n\n**Error:** ${parsed.error}`)
+          setIsStreaming(false)
+          if (currentStream.current) {
+            api.stopStream(currentStream.current)
+            currentStream.current = null
+          }
+        }
+        else if (parsed.content) {
+          // Legacy format (backward compatibility)
           appendResponse(parsed.content)
         }
       } catch (err) {
@@ -153,6 +215,63 @@ export function ResponsePanel() {
         </div>
       </div>
       <div className="px-4 py-3 overflow-hidden">
+        {/* Tool Executions Display */}
+        {toolExecutions.length > 0 && (
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Wrench className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <div className="text-sm font-medium text-gray-700 dark:text-gray-300">Tool Executions</div>
+            </div>
+            <div className="space-y-2">
+              {toolExecutions.map((te, idx) => (
+                <div 
+                  key={te.id || idx} 
+                  className="border border-blue-200 dark:border-blue-800/50 rounded-md p-3 bg-blue-50/50 dark:bg-blue-950/20"
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <code className="text-sm font-semibold text-blue-900 dark:text-blue-100">{te.name}</code>
+                    {te.status === 'pending' && (
+                      <span className="text-xs text-gray-500 dark:text-gray-400">Pending</span>
+                    )}
+                    {te.status === 'executing' && (
+                      <span className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Executing...
+                      </span>
+                    )}
+                    {te.status === 'completed' && (
+                      <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                        <CheckCircle className="h-3 w-3" />
+                        Completed
+                      </span>
+                    )}
+                    {te.status === 'error' && (
+                      <span className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+                        <XCircle className="h-3 w-3" />
+                        Error
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
+                    <span className="font-medium">Args:</span> <code className="bg-white dark:bg-gray-900 px-1 py-0.5 rounded">{te.arguments}</code>
+                  </div>
+                  {te.result && (
+                    <details className="text-xs mt-2">
+                      <summary className="cursor-pointer text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100">
+                        View result
+                      </summary>
+                      <pre className="mt-2 p-2 bg-white dark:bg-gray-900 rounded overflow-x-auto text-xs border border-gray-200 dark:border-gray-700">
+                        {JSON.stringify(te.result, null, 2)}
+                      </pre>
+                    </details>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {/* Response Content */}
         <div className="prose prose-sm dark:prose-invert max-w-none break-words" aria-live="polite">
           {response ? (
             <ReactMarkdown 
