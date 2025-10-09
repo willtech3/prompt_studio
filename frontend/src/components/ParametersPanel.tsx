@@ -4,6 +4,9 @@ import { usePromptStore } from '../store/promptStore'
 
 export function ParametersPanel() {
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [showTools, setShowTools] = useState(false)
+  const [toolSchemas, setToolSchemas] = useState('')
+  const [toolsError, setToolsError] = useState<string | null>(null)
   const parameters = usePromptStore((s) => s.parameters)
   const supported = usePromptStore((s) => s.supportedParameters)
   const model = usePromptStore((s) => s.model)
@@ -272,6 +275,89 @@ export function ParametersPanel() {
 
         {/* analysis/debug-only fields removed from UI: logprobs, top_logprobs, logit_bias */}
 
+        {/* Tool Schemas (Experimental) */}
+        {showAdvanced && (
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm text-gray-600 dark:text-gray-300">Tool Schemas (Experimental)</label>
+              <button
+                type="button"
+                onClick={() => setShowTools(!showTools)}
+                className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                {showTools ? 'Hide' : 'Show example'}
+              </button>
+            </div>
+            <textarea
+              className="w-full min-h-[80px] font-mono text-xs rounded-md bg-transparent border border-gray-300 dark:border-white/15 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder='[{"type":"function","function":{"name":"search_web","description":"Search the web","parameters":{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}}}]'
+              value={toolSchemas}
+              onChange={(e) => {
+                setToolSchemas(e.target.value)
+                // Validate JSON
+                if (e.target.value.trim()) {
+                  try {
+                    JSON.parse(e.target.value)
+                    setToolsError(null)
+                  } catch {
+                    setToolsError('Invalid JSON')
+                  }
+                } else {
+                  setToolsError(null)
+                }
+              }}
+            />
+            {toolsError && <p className="text-xs text-red-600 mt-1">{toolsError}</p>}
+            {showTools && (
+              <details className="mt-2 text-xs">
+                <summary className="cursor-pointer text-gray-700 dark:text-gray-300">Built-in tools</summary>
+                <pre className="mt-2 p-2 bg-gray-50 dark:bg-gray-900 rounded overflow-x-auto border border-gray-200 dark:border-gray-700">
+{`[
+  {
+    "type": "function",
+    "function": {
+      "name": "search_web",
+      "description": "Search the web for current information",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string"},
+          "num_results": {"type": "integer", "default": 3}
+        },
+        "required": ["query"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_current_time",
+      "description": "Get current date and time",
+      "parameters": {"type": "object", "properties": {}}
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "calculate",
+      "description": "Evaluate math expression",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "expression": {"type": "string"}
+        },
+        "required": ["expression"]
+      }
+    }
+  }
+]`}
+                </pre>
+              </details>
+            )}
+            <p className="text-xs text-gray-500 mt-1">Paste OpenAI-format tool schemas to test tool calling. Only built-in tools (search_web, get_current_time, calculate) are executed.</p>
+          </div>
+        )}
+
         <div className="flex items-center gap-2">
           <input
             id="streaming"
@@ -285,4 +371,10 @@ export function ParametersPanel() {
       </div>
     </section>
   )
+}
+
+// Export tool schemas for use by ResponsePanel
+export function useToolSchemas() {
+  const [toolSchemas, setToolSchemas] = useState('')
+  return { toolSchemas, setToolSchemas }
 }

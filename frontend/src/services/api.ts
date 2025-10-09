@@ -20,6 +20,9 @@ export class APIClient {
     logprobs?: boolean | null
     topLogprobs?: number | null
     logitBiasJson?: string | null
+    // Tool calling
+    tools?: string | null
+    toolChoice?: string | null
   }): EventSource {
     const params = new URLSearchParams()
     params.set('model', request.model)
@@ -41,6 +44,8 @@ export class APIClient {
     if (request.logprobs != null) params.set('logprobs', String(request.logprobs))
     if (request.topLogprobs != null) params.set('top_logprobs', String(request.topLogprobs))
     if (request.logitBiasJson) params.set('logit_bias', request.logitBiasJson)
+    if (request.tools) params.set('tools', request.tools)
+    if (request.toolChoice) params.set('tool_choice', request.toolChoice)
 
     // Use relative path so Vite proxy forwards to backend
     return new EventSource(`/api/chat/stream?${params.toString()}`)
