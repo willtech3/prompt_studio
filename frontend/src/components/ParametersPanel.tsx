@@ -2,6 +2,67 @@ import { useMemo, useState } from 'react'
 import { getModelPreset } from '../utils/modelPresets'
 import { usePromptStore } from '../store/promptStore'
 
+// Tool schema definitions
+const TOOL_DEFINITIONS = {
+  search_web: {
+    type: "function",
+    function: {
+      name: "search_web",
+      description: "Search the web for current information. Returns top search results with titles, snippets, and URLs.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "The search query to look up"
+          },
+          num_results: {
+            type: "integer",
+            description: "Number of results to return (1-5)",
+            default: 3
+          }
+        },
+        required: ["query"]
+      }
+    }
+  },
+  get_current_time: {
+    type: "function",
+    function: {
+      name: "get_current_time",
+      description: "Get the current date and time in ISO 8601 format (UTC timezone).",
+      parameters: {
+        type: "object",
+        properties: {
+          timezone: {
+            type: "string",
+            description: "Timezone name (e.g., 'UTC', 'America/New_York'). Defaults to UTC.",
+            default: "UTC"
+          }
+        },
+        required: []
+      }
+    }
+  },
+  calculate: {
+    type: "function",
+    function: {
+      name: "calculate",
+      description: "Safely evaluate a mathematical expression. Supports basic arithmetic: +, -, *, /, ** (power). No variables or functions allowed.",
+      parameters: {
+        type: "object",
+        properties: {
+          expression: {
+            type: "string",
+            description: "Mathematical expression to evaluate (e.g., '25 * 17 + 89')"
+          }
+        },
+        required: ["expression"]
+      }
+    }
+  }
+}
+
 export function ParametersPanel() {
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [showTools, setShowTools] = useState(false)
@@ -10,6 +71,38 @@ export function ParametersPanel() {
   const toolSchemas = usePromptStore((s) => s.toolSchemas)
   const setToolSchemas = usePromptStore((s) => s.setToolSchemas)
   const supported = usePromptStore((s) => s.supportedParameters)
+  
+  // Handle tool selection
+  const handleToolToggle = (toolName: string, enabled: boolean) => {
+    let currentTools: string[] = []
+    
+    // Parse current tool schemas to get enabled tools
+    if (toolSchemas) {
+      try {
+        const parsed = JSON.parse(toolSchemas)
+        currentTools = parsed.map((t: any) => t.function?.name).filter(Boolean)
+      } catch {
+        // Invalid JSON, start fresh
+      }
+    }
+    
+    // Add or remove tool
+    if (enabled) {
+      if (!currentTools.includes(toolName)) {
+        currentTools.push(toolName)
+      }
+    } else {
+      currentTools = currentTools.filter(t => t !== toolName)
+    }
+    
+    // Generate new JSON schema
+    if (currentTools.length === 0) {
+      setToolSchemas('')
+    } else {
+      const schemas = currentTools.map(name => TOOL_DEFINITIONS[name as keyof typeof TOOL_DEFINITIONS]).filter(Boolean)
+      setToolSchemas(JSON.stringify(schemas))
+    }
+  }
   const model = usePromptStore((s) => s.model)
   const modelInfo = usePromptStore((s) => s.modelInfo)
   const setTemperature = usePromptStore((s) => s.setTemperature)
@@ -276,86 +369,66 @@ export function ParametersPanel() {
 
         {/* analysis/debug-only fields removed from UI: logprobs, top_logprobs, logit_bias */}
 
-        {/* Tool Schemas (Experimental) */}
+        {/* Available Tools */}
         {showAdvanced && (
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-sm text-gray-600 dark:text-gray-300">Tool Schemas (Experimental)</label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm text-gray-600 dark:text-gray-300">Available Tools</label>
               <button
                 type="button"
                 onClick={() => setShowTools(!showTools)}
-                className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
               >
-                {showTools ? 'Hide' : 'Show example'}
+                {showTools ? 'Hide details' : 'View schemas'}
               </button>
             </div>
-            <textarea
-              className="w-full min-h-[80px] font-mono text-xs rounded-md bg-transparent border border-gray-300 dark:border-white/15 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder='[{"type":"function","function":{"name":"search_web","description":"Search the web","parameters":{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}}}]'
-              value={toolSchemas}
-              onChange={(e) => {
-                setToolSchemas(e.target.value)
-                // Validate JSON
-                if (e.target.value.trim()) {
-                  try {
-                    JSON.parse(e.target.value)
-                    setToolsError(null)
-                  } catch {
-                    setToolsError('Invalid JSON')
-                  }
-                } else {
-                  setToolsError(null)
-                }
-              }}
-            />
-            {toolsError && <p className="text-xs text-red-600 mt-1">{toolsError}</p>}
-            {showTools && (
-              <details className="mt-2 text-xs">
-                <summary className="cursor-pointer text-gray-700 dark:text-gray-300">Built-in tools</summary>
-                <pre className="mt-2 p-2 bg-gray-50 dark:bg-gray-900 rounded overflow-x-auto border border-gray-200 dark:border-gray-700">
-{`[
-  {
-    "type": "function",
-    "function": {
-      "name": "search_web",
-      "description": "Search the web for current information",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "query": {"type": "string"},
-          "num_results": {"type": "integer", "default": 3}
-        },
-        "required": ["query"]
-      }
-    }
-  },
-  {
-    "type": "function",
-    "function": {
-      "name": "get_current_time",
-      "description": "Get current date and time",
-      "parameters": {"type": "object", "properties": {}}
-    }
-  },
-  {
-    "type": "function",
-    "function": {
-      "name": "calculate",
-      "description": "Evaluate math expression",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "expression": {"type": "string"}
-        },
-        "required": ["expression"]
-      }
-    }
-  }
-]`}
+            <div className="space-y-2">
+              <label className="flex items-start gap-2 p-2 rounded hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 accent-blue-600"
+                  checked={toolSchemas.includes('search_web')}
+                  onChange={(e) => handleToolToggle('search_web', e.target.checked)}
+                />
+                <div className="flex-1">
+                  <div className="text-sm font-medium">search_web</div>
+                  <div className="text-xs text-gray-500">Search the web for current information</div>
+                </div>
+              </label>
+              <label className="flex items-start gap-2 p-2 rounded hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 accent-blue-600"
+                  checked={toolSchemas.includes('get_current_time')}
+                  onChange={(e) => handleToolToggle('get_current_time', e.target.checked)}
+                />
+                <div className="flex-1">
+                  <div className="text-sm font-medium">get_current_time</div>
+                  <div className="text-xs text-gray-500">Get current date and time in UTC</div>
+                </div>
+              </label>
+              <label className="flex items-start gap-2 p-2 rounded hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 accent-blue-600"
+                  checked={toolSchemas.includes('calculate')}
+                  onChange={(e) => handleToolToggle('calculate', e.target.checked)}
+                />
+                <div className="flex-1">
+                  <div className="text-sm font-medium">calculate</div>
+                  <div className="text-xs text-gray-500">Safely evaluate mathematical expressions</div>
+                </div>
+              </label>
+            </div>
+            {showTools && toolSchemas && (
+              <details className="mt-3 text-xs">
+                <summary className="cursor-pointer text-gray-600 dark:text-gray-400">Generated tool schemas</summary>
+                <pre className="mt-2 p-2 bg-gray-50 dark:bg-gray-900 rounded overflow-x-auto border border-gray-200 dark:border-gray-700 text-[10px]">
+                  {toolSchemas}
                 </pre>
               </details>
             )}
-            <p className="text-xs text-gray-500 mt-1">Paste OpenAI-format tool schemas to test tool calling. Only built-in tools (search_web, get_current_time, calculate) are executed.</p>
+            <p className="text-xs text-gray-500 mt-2">Select tools to make available to the model. The model will decide when to use them.</p>
           </div>
         )}
 
