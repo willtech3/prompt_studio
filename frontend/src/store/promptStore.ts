@@ -4,7 +4,7 @@ export type Provider = 'openai' | 'anthropic' | 'google' | 'xai' | 'deepseek'
 
 export interface ModelParameters {
   temperature: number
-  maxTokens: number
+  maxTokens: number | null
   topP: number
   streaming: boolean
   // Optional advanced params (null when unused)
@@ -53,6 +53,8 @@ export interface PromptState {
   supportedParameters: string[]
   systemOptInfo?: OptimizationInfo
   userOptInfo?: OptimizationInfo
+  originalSystemPrompt?: string
+  originalUserPrompt?: string
   presetExplainer?: string | null
   showPresetExplainer: boolean
 }
@@ -63,7 +65,7 @@ interface PromptActions {
   setSystemPrompt: (v: string) => void
   setUserPrompt: (v: string) => void
   setTemperature: (v: number) => void
-  setMaxTokens: (v: number) => void
+  setMaxTokens: (v: number | null) => void
   setTopP: (v: number) => void
   setStreaming: (v: boolean) => void
   setTopK: (v: number | null) => void
@@ -90,6 +92,12 @@ interface PromptActions {
   setSupportedParameters: (params: string[]) => void
   setSystemOptInfo: (info: OptimizationInfo | undefined) => void
   setUserOptInfo: (info: OptimizationInfo | undefined) => void
+  setOriginalSystemPrompt: (v: string | undefined) => void
+  setOriginalUserPrompt: (v: string | undefined) => void
+  revertSystemPrompt: () => void
+  revertUserPrompt: () => void
+  applySystemOptimization: (original: string, optimized: string, info: OptimizationInfo) => void
+  applyUserOptimization: (original: string, optimized: string, info: OptimizationInfo) => void
   applyModelPresets: (preset: {
     temperature?: number
     topP?: number
@@ -112,7 +120,7 @@ export const usePromptStore = create<PromptState & PromptActions>((set) => ({
   variables: [],
   parameters: {
     temperature: 0.7,
-    maxTokens: 8000,
+    maxTokens: null,
     topP: 1,
     streaming: true,
     topK: null,
@@ -136,14 +144,30 @@ export const usePromptStore = create<PromptState & PromptActions>((set) => ({
   supportedParameters: [],
   systemOptInfo: undefined,
   userOptInfo: undefined,
+  originalSystemPrompt: undefined,
+  originalUserPrompt: undefined,
   presetExplainer: null,
   showPresetExplainer: true,
   setProvider: (p) => set({ provider: p }),
   setModel: (m) => set({ model: m }),
-  setSystemPrompt: (v) => set({ systemPrompt: v }),
-  setUserPrompt: (v) => set({ userPrompt: v }),
+  setSystemPrompt: (v) => set((s) => {
+    // Only clear optimization info if user is actually editing (value changed) and there's something to clear
+    const shouldClearOpt = v !== s.systemPrompt && (s.originalSystemPrompt !== undefined || s.systemOptInfo !== undefined)
+    return {
+      systemPrompt: v,
+      ...(shouldClearOpt ? { originalSystemPrompt: undefined, systemOptInfo: undefined } : {}),
+    }
+  }),
+  setUserPrompt: (v) => set((s) => {
+    // Only clear optimization info if user is actually editing (value changed) and there's something to clear
+    const shouldClearOpt = v !== s.userPrompt && (s.originalUserPrompt !== undefined || s.userOptInfo !== undefined)
+    return {
+      userPrompt: v,
+      ...(shouldClearOpt ? { originalUserPrompt: undefined, userOptInfo: undefined } : {}),
+    }
+  }),
   setTemperature: (v) => set((s) => ({ parameters: { ...s.parameters, temperature: v } })),
-  setMaxTokens: (v) => set((s) => ({ parameters: { ...s.parameters, maxTokens: Math.max(1, Math.floor(v)) } })),
+  setMaxTokens: (v) => set((s) => ({ parameters: { ...s.parameters, maxTokens: v === null ? null : Math.max(1, Math.floor(v)) } })),
   setTopP: (v) => set((s) => ({ parameters: { ...s.parameters, topP: Math.min(1, Math.max(0, v)) } })),
   setStreaming: (v) => set((s) => ({ parameters: { ...s.parameters, streaming: v } })),
   setTopK: (v) => set((s) => ({ parameters: { ...s.parameters, topK: v } })),
@@ -166,10 +190,42 @@ export const usePromptStore = create<PromptState & PromptActions>((set) => ({
   appendResponse: (chunk) => set((s) => ({ response: s.response + chunk })),
   setIsStreaming: (v) => set({ isStreaming: v }),
   setReasoningEffort: (v) => set({ reasoningEffort: v }),
-  setModelInfo: (info) => set({ modelInfo: info }),
+  setModelInfo: (info) => set((s) => {
+    // Auto-set maxTokens to model's max_completion_tokens if not already set
+    const maxTokens = info?.max_completion_tokens || null
+    return {
+      modelInfo: info,
+      parameters: {
+        ...s.parameters,
+        maxTokens: maxTokens,
+      },
+    }
+  }),
   setSupportedParameters: (params) => set({ supportedParameters: params }),
   setSystemOptInfo: (info) => set({ systemOptInfo: info }),
   setUserOptInfo: (info) => set({ userOptInfo: info }),
+  setOriginalSystemPrompt: (v) => set({ originalSystemPrompt: v }),
+  setOriginalUserPrompt: (v) => set({ originalUserPrompt: v }),
+  revertSystemPrompt: () => set((s) => ({
+    systemPrompt: s.originalSystemPrompt ?? s.systemPrompt,
+    originalSystemPrompt: undefined,
+    systemOptInfo: undefined,
+  })),
+  revertUserPrompt: () => set((s) => ({
+    userPrompt: s.originalUserPrompt ?? s.userPrompt,
+    originalUserPrompt: undefined,
+    userOptInfo: undefined,
+  })),
+  applySystemOptimization: (original: string, optimized: string, info: OptimizationInfo) => set({
+    systemPrompt: optimized,
+    originalSystemPrompt: original,
+    systemOptInfo: info,
+  }),
+  applyUserOptimization: (original: string, optimized: string, info: OptimizationInfo) => set({
+    userPrompt: optimized,
+    originalUserPrompt: original,
+    userOptInfo: info,
+  }),
   applyModelPresets: (preset, explainer) => set((s) => ({
     parameters: {
       ...s.parameters,

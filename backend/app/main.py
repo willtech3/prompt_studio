@@ -90,12 +90,28 @@ async def stream_chat(
     logprobs: Optional[bool] = Query(None, description="Return log probabilities of tokens"),
     top_logprobs: Optional[int] = Query(None, description="How many top tokens to include in logprobs"),
     logit_bias: Optional[str] = Query(None, description="JSON object mapping token IDs to bias values"),
+    session: AsyncSession = Depends(get_session),
 ):
     async def generate():
         # If no API key is set, return a helpful message.
         if not os.getenv("OPENROUTER_API_KEY"):
             yield "data: Set OPENROUTER_API_KEY to enable streaming.\n\n"
             return
+
+        # Fetch model configuration to get max_completion_tokens
+        effective_max_tokens = max_tokens
+        if effective_max_tokens is None:
+            try:
+                await create_all()
+                model_config = (await session.execute(
+                    select(ModelConfig).where(ModelConfig.model_id == model)
+                )).scalar_one_or_none()
+                
+                if model_config and model_config.max_completion_tokens:
+                    effective_max_tokens = model_config.max_completion_tokens
+            except Exception:
+                # Minimal: if we can't fetch model config, proceed without max_tokens
+                pass
 
         messages = []
         if system:
@@ -107,8 +123,8 @@ async def stream_chat(
 
         svc = OpenRouterService()
         params = {"temperature": temperature, "top_p": top_p}
-        if max_tokens is not None:
-            params["max_tokens"] = max_tokens
+        if effective_max_tokens is not None:
+            params["max_tokens"] = effective_max_tokens
         if reasoning_effort and reasoning_effort.lower() != "auto":
             params["reasoning"] = {"effort": reasoning_effort.lower()}
 

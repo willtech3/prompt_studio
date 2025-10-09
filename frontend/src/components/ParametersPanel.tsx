@@ -7,6 +7,7 @@ export function ParametersPanel() {
   const parameters = usePromptStore((s) => s.parameters)
   const supported = usePromptStore((s) => s.supportedParameters)
   const model = usePromptStore((s) => s.model)
+  const modelInfo = usePromptStore((s) => s.modelInfo)
   const setTemperature = usePromptStore((s) => s.setTemperature)
   const setMaxTokens = usePromptStore((s) => s.setMaxTokens)
   const setTopP = usePromptStore((s) => s.setTopP)
@@ -132,11 +133,16 @@ export function ParametersPanel() {
             <input
               type="number"
               className="w-full rounded-md bg-transparent border border-gray-300 dark:border-white/15 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={parameters.maxTokens}
+              value={parameters.maxTokens ?? ''}
               min={1}
-              onChange={(e) => setMaxTokens(Number(e.target.value))}
+              placeholder={modelInfo?.max_completion_tokens ? String(modelInfo.max_completion_tokens) : 'Model max'}
+              onChange={(e) => setMaxTokens(e.target.value === '' ? null : Number(e.target.value))}
             />
-            <p className="text-xs text-gray-500 mt-1">Default 8,000 for long prompts; reduce to save cost.</p>
+            <p className="text-xs text-gray-500 mt-1">
+              {modelInfo?.max_completion_tokens 
+                ? `Using model maximum (${modelInfo.max_completion_tokens.toLocaleString()}). Set lower to reduce cost.`
+                : 'Using model maximum tokens. Set lower to reduce cost.'}
+            </p>
           </div>
         )}
 

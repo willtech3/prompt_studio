@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { usePromptStore } from '../store/promptStore'
 import { api } from '../services/api'
-import { Wand2, Plus, Copy, Braces, PanelLeft } from 'lucide-react'
+import { Wand2, Plus, Copy, Braces, PanelLeft, Undo2 } from 'lucide-react'
 import { useToastStore } from '../store/toastStore'
 import { estimateTokensApproximate } from '../utils/tokenEstimator'
 import { useAutoGrow } from '../hooks/useAutoGrow'
@@ -14,8 +14,12 @@ export function PromptEditor() {
   const setUserPrompt = usePromptStore((s) => s.setUserPrompt)
   const provider = usePromptStore((s) => s.provider)
   const model = usePromptStore((s) => s.model)
-  const setSystemOptInfo = usePromptStore((s) => s.setSystemOptInfo)
-  const setUserOptInfo = usePromptStore((s) => s.setUserOptInfo)
+  const applySystemOptimization = usePromptStore((s) => s.applySystemOptimization)
+  const applyUserOptimization = usePromptStore((s) => s.applyUserOptimization)
+  const originalSystemPrompt = usePromptStore((s) => s.originalSystemPrompt)
+  const originalUserPrompt = usePromptStore((s) => s.originalUserPrompt)
+  const revertSystemPrompt = usePromptStore((s) => s.revertSystemPrompt)
+  const revertUserPrompt = usePromptStore((s) => s.revertUserPrompt)
   const reset = usePromptStore((s) => s.reset)
   const variables = usePromptStore((s) => s.variables)
   const addVariable = usePromptStore((s) => s.addVariable)
@@ -41,13 +45,13 @@ export function PromptEditor() {
       })
       const notes = Array.isArray(res.notes) ? res.notes : []
       const changes = Array.isArray(res.changes) ? res.changes : []
+      const info = { time: Date.now(), notes, changes }
+      
       if (kind === 'system') {
-        setSystemPrompt(res.optimized)
-        setSystemOptInfo({ time: Date.now(), notes, changes })
+        applySystemOptimization(systemPrompt, res.optimized, info)
         showToast('System prompt optimized', 'success')
       } else {
-        setUserPrompt(res.optimized)
-        setUserOptInfo({ time: Date.now(), notes, changes })
+        applyUserOptimization(userPrompt, res.optimized, info)
         showToast('User prompt optimized', 'success')
       }
     } catch (e) {
@@ -114,15 +118,28 @@ export function PromptEditor() {
       <div className="px-4 py-3 overflow-hidden">
       <div className="flex items-center justify-between mb-1">
         <label className="block text-sm text-gray-600 dark:text-gray-300">System prompt (optional)</label>
-        <button
-          type="button"
-          onClick={() => optimizeField('system')}
-          disabled={!systemPrompt.trim() || optimizing.system}
-          className="text-xs inline-flex items-center gap-1 rounded-md border border-gray-300 dark:border-white/15 px-2 py-1 disabled:opacity-50 hover:bg-gray-100 dark:hover:bg-white/10"
-        >
-          <Wand2 className="h-3.5 w-3.5" />
-          {optimizing.system ? 'Optimizing…' : 'Optimize'}
-        </button>
+        <div className="flex items-center gap-2">
+          {originalSystemPrompt && (
+            <button
+              type="button"
+              onClick={revertSystemPrompt}
+              className="text-xs inline-flex items-center gap-1 rounded-md border border-gray-300 dark:border-white/15 px-2 py-1 hover:bg-gray-100 dark:hover:bg-white/10"
+              title="Revert to original"
+            >
+              <Undo2 className="h-3.5 w-3.5" />
+              Revert
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => optimizeField('system')}
+            disabled={!systemPrompt.trim() || optimizing.system}
+            className="text-xs inline-flex items-center gap-1 rounded-md border border-gray-300 dark:border-white/15 px-2 py-1 disabled:opacity-50 hover:bg-gray-100 dark:hover:bg-white/10"
+          >
+            <Wand2 className="h-3.5 w-3.5" />
+            {optimizing.system ? 'Optimizing…' : 'Optimize'}
+          </button>
+        </div>
       </div>
       <AutoGrowTextarea
         value={systemPrompt}
@@ -134,15 +151,28 @@ export function PromptEditor() {
       <SystemOptimizationNotes />
       <div className="flex items-center justify-between mt-4 mb-1">
         <label className="block text-sm text-gray-600 dark:text-gray-300">User prompt</label>
-        <button
-          type="button"
-          onClick={() => optimizeField('user')}
-          disabled={!userPrompt.trim() || optimizing.user}
-          className="text-xs inline-flex items-center gap-1 rounded-md border border-gray-300 dark:border-white/15 px-2 py-1 disabled:opacity-50 hover:bg-gray-100 dark:hover:bg-white/10"
-        >
-          <Wand2 className="h-3.5 w-3.5" />
-          {optimizing.user ? 'Optimizing…' : 'Optimize'}
-        </button>
+        <div className="flex items-center gap-2">
+          {originalUserPrompt && (
+            <button
+              type="button"
+              onClick={revertUserPrompt}
+              className="text-xs inline-flex items-center gap-1 rounded-md border border-gray-300 dark:border-white/15 px-2 py-1 hover:bg-gray-100 dark:hover:bg-white/10"
+              title="Revert to original"
+            >
+              <Undo2 className="h-3.5 w-3.5" />
+              Revert
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => optimizeField('user')}
+            disabled={!userPrompt.trim() || optimizing.user}
+            className="text-xs inline-flex items-center gap-1 rounded-md border border-gray-300 dark:border-white/15 px-2 py-1 disabled:opacity-50 hover:bg-gray-100 dark:hover:bg-white/10"
+          >
+            <Wand2 className="h-3.5 w-3.5" />
+            {optimizing.user ? 'Optimizing…' : 'Optimize'}
+          </button>
+        </div>
       </div>
       <AutoGrowTextarea
         value={userPrompt}
