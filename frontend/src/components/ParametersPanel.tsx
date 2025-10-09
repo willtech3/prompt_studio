@@ -5,9 +5,10 @@ import { usePromptStore } from '../store/promptStore'
 export function ParametersPanel() {
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [showTools, setShowTools] = useState(false)
-  const [toolSchemas, setToolSchemas] = useState('')
   const [toolsError, setToolsError] = useState<string | null>(null)
   const parameters = usePromptStore((s) => s.parameters)
+  const toolSchemas = usePromptStore((s) => s.toolSchemas)
+  const setToolSchemas = usePromptStore((s) => s.setToolSchemas)
   const supported = usePromptStore((s) => s.supportedParameters)
   const model = usePromptStore((s) => s.model)
   const modelInfo = usePromptStore((s) => s.modelInfo)
@@ -371,10 +372,4 @@ export function ParametersPanel() {
       </div>
     </section>
   )
-}
-
-// Export tool schemas for use by ResponsePanel
-export function useToolSchemas() {
-  const [toolSchemas, setToolSchemas] = useState('')
-  return { toolSchemas, setToolSchemas }
 }

@@ -29,6 +29,7 @@ export function ResponsePanel() {
   const variables = usePromptStore((s) => s.variables)
   const parameters = usePromptStore((s) => s.parameters)
   const reasoningEffort = usePromptStore((s) => s.reasoningEffort)
+  const toolSchemas = usePromptStore((s) => s.toolSchemas)
   const model = usePromptStore((s) => s.model)
   const settingsOpen = useUIStore((s) => s.settingsOpen)
   const toggleSettings = useUIStore((s) => s.toggleSettings)
@@ -72,6 +73,8 @@ export function ResponsePanel() {
       responseFormat: parameters.responseFormat,
       stop: parameters.stop,
       reasoningEffort: reasoningEffort,
+      tools: toolSchemas || null,
+      toolChoice: toolSchemas ? 'auto' : null,
     })
     currentStream.current = es
     es.addEventListener('message', (e) => {
