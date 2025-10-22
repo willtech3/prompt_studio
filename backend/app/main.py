@@ -293,14 +293,19 @@ async def stream_chat(
             # Normalize response_format for Chat Completions
             # Accept either keywords (e.g., "json", "json_object") or a JSON object string
             rf_text = str(response_format).strip()
-            try:
-                rf_obj = json.loads(rf_text)
-                if isinstance(rf_obj, dict):
-                    params["response_format"] = rf_obj
-            except Exception:
-                rf_lower = rf_text.lower()
-                if rf_lower in ("json", "json_object", "jsonobject"):
-                    params["response_format"] = {"type": "json_object"}
+            # Some providers (e.g., xai/grok-4) currently reject response_format.
+            # Keep simple: avoid setting it for xai:* models to prevent 400s.
+            provider_prefix = (model or "").split("/")[0].split(":")[0].replace("-", "")
+            allow_response_format = provider_prefix not in {"xai"}
+            if allow_response_format:
+                try:
+                    rf_obj = json.loads(rf_text)
+                    if isinstance(rf_obj, dict):
+                        params["response_format"] = rf_obj
+                except Exception:
+                    rf_lower = rf_text.lower()
+                    if rf_lower in ("json", "json_object", "jsonobject"):
+                        params["response_format"] = {"type": "json_object"}
         if stop:
             # Accept either comma or newline separated values
             seps = [",", "\n"]

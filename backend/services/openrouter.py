@@ -63,6 +63,18 @@ class OpenRouterService:
         }
         payload.update(params)
         r = await client.post("/chat/completions", json=payload)
+        if r.status_code >= 400:
+            # Bubble up server error details to help debug bad requests
+            try:
+                data = r.json()
+                detail = data.get("error") or data
+            except Exception:
+                detail = r.text
+            raise httpx.HTTPStatusError(
+                f"{r.status_code} from OpenRouter: {detail}",
+                request=r.request,
+                response=r,
+            )
         r.raise_for_status()
         return r.json()
 
@@ -90,6 +102,22 @@ class OpenRouterService:
         payload.update(params)
 
         async with client.stream("POST", "/chat/completions", json=payload) as resp:
+            if resp.status_code >= 400:
+                # Read server body for clearer diagnostics
+                body = None
+                try:
+                    await resp.aread()
+                    try:
+                        body_json = resp.json()
+                        body = body_json.get("error") or body_json
+                    except Exception:
+                        body = resp.text
+                except Exception:
+                    body = None
+                msg = f"{resp.status_code} from OpenRouter"
+                if body:
+                    msg += f": {body}"
+                raise httpx.HTTPStatusError(msg, request=resp.request, response=resp)
             resp.raise_for_status()
             async for line in resp.aiter_lines():
                 if not line:
