@@ -235,6 +235,24 @@ async def stream_chat(
         svc = OpenRouterService()
         tool_executor = ToolExecutor() if tool_schemas else None
         
+        # Helper: extract plain text from provider-specific content blocks
+        def _content_to_text(content) -> str:
+            try:
+                if isinstance(content, str):
+                    return content
+                # Anthropic-style list of blocks
+                if isinstance(content, list):
+                    parts = []
+                    for block in content:
+                        if isinstance(block, dict):
+                            # Prefer text blocks for final answer
+                            if block.get("type") == "text" and isinstance(block.get("text"), str):
+                                parts.append(block.get("text", ""))
+                    return "\n".join([p for p in parts if p])
+            except Exception:
+                pass
+            return ""
+
         # Build base parameters
         params = {"temperature": temperature, "top_p": top_p}
         if effective_max_tokens is not None:
@@ -455,7 +473,7 @@ async def stream_chat(
                             )
 
                             finalize_message = finalize_response.get("choices", [{}])[0].get("message", {})
-                            finalize_content = finalize_message.get("content", "")
+                            finalize_content = _content_to_text(finalize_message.get("content", ""))
 
                             if finalize_content:
                                 yield f"data: {json.dumps({'type': 'content', 'content': finalize_content})}\n\n"
@@ -484,11 +502,16 @@ async def stream_chat(
                                 yield f"data: {json.dumps({'type': 'error', 'error': f'Streaming finalization failed: {str(e)}'})}\n\n"
                                 break
 
+                        # If nothing was produced, emit a gentle fallback so the UI isn't blank
+                        if not sent_any_content:
+                            yield f"data: {json.dumps({'type': 'content', 'content': 'No additional content generated.'})}\n\n"
+                            sent_any_content = True
+
                         # Should not reach here, but if we do, break to prevent infinite loop
                         break
                     else:
                         # Model provided response without tool calls
-                        content = message.get("content", "")
+                        content = _content_to_text(message.get("content", ""))
 
                         # Track if we've executed any tools in this run
                         any_tools_executed = any(True for msg in messages if msg.get("role") == "tool")
