@@ -1,33 +1,49 @@
 # OpenRouter API Documentation
 
+> **Last Updated:** January 2025
+> **API Version:** v1
+> **Base URL:** `https://openrouter.ai/api/v1`
+
 ## Overview
-OpenRouter provides a unified API to access 16 AI models from dozens of providers through a single endpoint, with automatic fallbacks and cost optimization.
 
-## Key Features
-- **Unified Interface**: Single API for all models
+OpenRouter provides a unified API to access 500+ AI models from dozens of providers through a single endpoint, with automatic fallbacks, intelligent routing, and cost optimization.
+
+### Key Features
+
+- **Unified Interface**: Single API for all models (OpenAI-compatible)
 - **Automatic Fallbacks**: Seamless provider switching on errors
-- **Cost Optimization**: Routes to most cost-effective providers
+- **Intelligent Routing**: Cost, performance, or custom routing
+- **Tool/Function Calling**: Standardized across all providers
+- **Multimodal Support**: Images, PDFs, audio inputs
+- **Web Search Integration**: Native search capabilities
+- **Prompt Caching**: Reduce costs for repeated prompts
+- **Structured Outputs**: JSON mode and schema-based outputs
 - **No Markup**: Pass-through pricing from providers
-- **OpenAI Compatible**: Drop-in replacement for OpenAI API
 
-## Getting Started
+## Quick Start
 
-### API Key
+### 1. Get API Key
 Get your API key from [OpenRouter](https://openrouter.ai/keys)
 
-### Base URL
-```
-https://openrouter.ai/api/v1
-```
-
-## Authentication
-
+### 2. Authentication
 Include your API key in the Authorization header:
-```javascript
-headers: {
-  'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-  'Content-Type': 'application/json',
-}
+
+```http
+Authorization: Bearer YOUR_API_KEY
+Content-Type: application/json
+```
+
+### 3. Basic Request
+```bash
+curl https://openrouter.ai/api/v1/chat/completions \
+  -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "anthropic/claude-sonnet-4",
+    "messages": [
+      {"role": "user", "content": "Hello!"}
+    ]
+  }'
 ```
 
 ## Core Endpoints
@@ -37,22 +53,22 @@ headers: {
 GET /api/v1/models
 ```
 
-Response:
+Returns all available models with pricing, capabilities, and context limits.
+
+**Response:**
 ```json
 {
   "data": [
     {
-      "id": "openai/gpt-4-turbo-preview",
-      "name": "GPT-4 Turbo",
-      "description": "OpenAI's latest GPT-4 Turbo model",
+      "id": "anthropic/claude-sonnet-4",
+      "name": "Claude Sonnet 4",
+      "context_length": 200000,
       "pricing": {
-        "prompt": "0.00001",     // per token
-        "completion": "0.00003"   // per token
+        "prompt": "0.000003",
+        "completion": "0.000015"
       },
-      "context_length": 128000,
       "top_provider": {
-        "max_completion_tokens": 4096,
-        "is_moderated": false
+        "max_completion_tokens": 8000
       }
     }
   ]
@@ -64,245 +80,444 @@ Response:
 POST /api/v1/chat/completions
 ```
 
-Request:
+**Request Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `model` | string | Yes | Model ID (e.g., "openai/gpt-4o", "anthropic/claude-sonnet-4") |
+| `messages` | array | Yes | Array of message objects with `role` and `content` |
+| `temperature` | float | No | Sampling temperature (0-2, default: 1) |
+| `max_tokens` | integer | No | Maximum tokens to generate |
+| `top_p` | float | No | Nucleus sampling (0-1, default: 1) |
+| `top_k` | integer | No | Top-K sampling (provider-specific) |
+| `frequency_penalty` | float | No | Penalize frequent tokens (-2 to 2) |
+| `presence_penalty` | float | No | Penalize present tokens (-2 to 2) |
+| `repetition_penalty` | float | No | Penalize repetitions (>0) |
+| `seed` | integer | No | Deterministic sampling seed |
+| `stop` | array/string | No | Stop sequences |
+| `stream` | boolean | No | Enable streaming responses |
+| `tools` | array | No | Tool/function definitions (see Tool Calling section) |
+| `tool_choice` | string/object | No | Control tool usage: "auto", "none", "required", or specific function |
+| `response_format` | object | No | Force output format (e.g., `{"type": "json_object"}`) |
+| `logprobs` | boolean | No | Return log probabilities |
+| `top_logprobs` | integer | No | Number of top tokens to include (1-5) |
+
+**Provider-Specific Parameters:**
+- `reasoning`: Object with `effort` field for reasoning models (e.g., `{"effort": "high"}`)
+- `safe_prompt`: Boolean for Mistral models
+- `raw_mode`: Boolean for Hyperbolic models
+
+**Important Notes:**
+- If a parameter is not supported by the chosen model, it is silently ignored
+- `response_format` is only supported by OpenAI, Nitro, and select other models
+- `tool_choice` routing: Only providers that support tool use will be used when tools are specified
+
+## Tool/Function Calling
+
+### Overview
+
+Tool calling allows LLMs to request execution of external functions. The LLM suggests which tool to call with what arguments, but **does not execute the tool directly**. The client must execute the tool and return results to the LLM.
+
+OpenRouter standardizes tool calling across all providers using OpenAI's tool calling format.
+
+### Workflow
+
+1. **Send Request with Tools**: Include `tools` array with function definitions
+2. **Model Requests Tool**: Model responds with `tool_calls` array
+3. **Execute Tools**: Client executes requested functions locally
+4. **Return Results**: Send tool results back to model
+5. **Final Response**: Model uses results to generate answer
+
+### Tool Definition Format
+
 ```json
 {
-  "model": "openai/gpt-4-turbo-preview",
-  "messages": [
+  "tools": [
     {
-      "role": "system",
-      "content": "You are a helpful assistant."
-    },
-    {
-      "role": "user",
-      "content": "Hello, how are you?"
+      "type": "function",
+      "function": {
+        "name": "search_web",
+        "description": "Search the web for current information",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Search query"
+            },
+            "num_results": {
+              "type": "integer",
+              "description": "Number of results (1-5)",
+              "default": 3
+            }
+          },
+          "required": ["query"]
+        }
+      }
     }
-  ],
-  "temperature": 0.7,
-  "max_tokens": 1000,
-  "top_p": 1,
-  "frequency_penalty": 0,
-  "presence_penalty": 0,
-  "stream": false,
-  "route": "fallback"  // Optional: "fallback" or specific provider
+  ]
 }
 ```
 
-Response:
+### Tool Choice Parameter
+
+Controls how the model uses tools:
+
+| Value | Behavior |
+|-------|----------|
+| `"auto"` | Model decides whether to call tools (default) |
+| `"none"` | Model will not call any tools |
+| `"required"` | Model must call at least one tool |
+| `{"type": "function", "function": {"name": "function_name"}}` | Force specific tool |
+
+**Example - Force Specific Tool:**
 ```json
 {
-  "id": "chatcmpl-123",
-  "object": "chat.completion",
-  "created": 1677652288,
-  "model": "openai/gpt-4-turbo-preview",
+  "tool_choice": {
+    "type": "function",
+    "function": {"name": "search_web"}
+  }
+}
+```
+
+### Tool Call Response Format
+
+When the model wants to use a tool:
+
+```json
+{
   "choices": [{
-    "index": 0,
     "message": {
       "role": "assistant",
-      "content": "Hello! I'm doing well, thank you for asking."
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_abc123",
+          "type": "function",
+          "function": {
+            "name": "search_web",
+            "arguments": "{\"query\": \"latest AI news\", \"num_results\": 3}"
+          }
+        }
+      ]
+    }
+  }]
+}
+```
+
+### Sending Tool Results
+
+After executing the tool, send results back:
+
+```json
+{
+  "messages": [
+    {"role": "user", "content": "What's the latest AI news?"},
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [...]  // Previous tool call
     },
-    "finish_reason": "stop"
-  }],
-  "usage": {
-    "prompt_tokens": 20,
-    "completion_tokens": 15,
-    "total_tokens": 35
+    {
+      "role": "tool",
+      "tool_call_id": "call_abc123",
+      "content": "{\"results\": [...]}",  // Tool execution result as JSON string
+      "name": "search_web"  // Optional
+    }
+  ]
+}
+```
+
+### Interleaved Thinking
+
+Some models support "interleaved thinking" - reasoning between tool calls:
+
+```json
+{
+  "choices": [{
+    "message": {
+      "content": [
+        {"type": "text", "text": "I need to search for current data..."},
+        {"type": "thinking", "thinking": "The user wants recent information, so I should use search_web..."},
+        {"type": "tool_use", ...}
+      ]
+    }
+  }]
+}
+```
+
+### Best Practices
+
+1. **Clear Descriptions**: Provide detailed function and parameter descriptions
+2. **Structured Parameters**: Use JSON schema with proper types and constraints
+3. **Error Handling**: Handle tool execution failures gracefully
+4. **Iteration Limits**: Prevent infinite tool calling loops (max 5-20 iterations)
+5. **Token Management**: Monitor token usage as tool calls increase context
+6. **Tool Design**: Create focused, single-purpose tools
+
+### Finding Tool-Compatible Models
+
+Filter models by tool support:
+```
+https://openrouter.ai/models?supported_parameters=tools
+```
+
+## Provider-Specific Notes
+
+### Known Issues & Limitations
+
+#### xAI (Grok Models)
+- **Tool Calling Compatibility**: Known OpenRouter/xAI integration issues with forced `tool_choice`
+  - Error: "Required function is not present in the provided tools"
+  - **Workaround**: Use `tool_choice: "auto"` instead of forcing specific functions
+  - GitHub Issues: [zed#34185](https://github.com/zed-industries/zed/issues/34185), [zed#36994](https://github.com/zed-industries/zed/issues/36994)
+- **Response Format**: xAI models may reject `response_format` parameter
+- **Reasoning**: Mandatory reasoning, cannot be disabled
+
+#### Anthropic (Claude)
+- **Thinking Variant Deprecated**: `:thinking` variant no longer supported
+- **Use Instead**: `reasoning` parameter: `{"effort": "low|medium|high"}`
+- **Reasoning Tokens**: Available in response
+
+#### OpenAI (o-series)
+- **Reasoning Tokens**: Not visible in response despite being used
+
+#### Google (Gemini Flash Thinking)
+- **Reasoning Tokens**: Not visible in response
+
+### Parameter Support Matrix
+
+| Parameter | OpenAI | Anthropic | Google | xAI | DeepSeek |
+|-----------|--------|-----------|--------|-----|----------|
+| `tools` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `tool_choice` (forced) | ✅ | ✅ | ✅ | ⚠️ | ✅ |
+| `response_format` | ✅ | ❌ | Limited | ⚠️ | ✅ |
+| `top_k` | ❌ | ✅ | ✅ | ✅ | ✅ |
+| `logit_bias` | ✅ | ❌ | ❌ | ❌ | ❌ |
+| `reasoning` | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+⚠️ = Supported but with known issues
+
+## Error Handling
+
+### Error Response Format
+
+```typescript
+{
+  error: {
+    code: number;
+    message: string;
+    metadata?: Record<string, unknown>;
   }
 }
 ```
 
-### 3. Streaming Completions
-```javascript
-const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-  method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-    'Content-Type': 'application/json',
+### Common Error Codes
+
+| Code | Meaning | Action |
+|------|---------|--------|
+| 400 | Bad Request | Check request parameters |
+| 401 | Invalid Credentials | Verify API key |
+| 402 | Insufficient Credits | Add credits to account |
+| 403 | Moderation Flagged | Review input content |
+| 408 | Request Timeout | Retry with timeout handling |
+| 429 | Rate Limited | Implement backoff, check retry-after header |
+| 502 | Provider Down | Try different model/provider |
+| 503 | No Available Providers | Wait and retry, use fallback |
+
+### Streaming Errors
+
+**Pre-stream errors**: Standard JSON error response
+
+**Mid-stream errors**: Sent as SSE events
+```json
+data: {
+  "error": {
+    "code": "server_error",
+    "message": "Provider disconnected"
   },
-  body: JSON.stringify({
-    model: 'openai/gpt-4-turbo-preview',
-    messages: messages,
-    stream: true,
-  }),
-});
-
-const reader = response.body.getReader();
-const decoder = new TextDecoder();
-
-while (true) {
-  const { done, value } = await reader.read();
-  if (done) break;
-
-  const chunk = decoder.decode(value);
-  const lines = chunk.split('\n');
-
-  for (const line of lines) {
-    if (line.startsWith('data: ')) {
-      const data = line.slice(6);
-      if (data === '[DONE]') break;
-
-      const parsed = JSON.parse(data);
-      console.log(parsed.choices[0]?.delta?.content || '');
-    }
-  }
+  "choices": [{
+    "finish_reason": "error"
+  }]
 }
+```
+
+### Error Handling Best Practices
+
+```python
+import httpx
+
+try:
+    response = await client.post(url, json=payload)
+
+    if response.status_code >= 400:
+        # Extract detailed error
+        try:
+            error_data = response.json()
+            detail = error_data.get("error", {})
+            message = detail.get("message", response.text)
+            metadata = detail.get("metadata", {})
+        except:
+            detail = response.text
+
+        raise httpx.HTTPStatusError(
+            f"{response.status_code} from OpenRouter: {detail}",
+            request=response.request,
+            response=response
+        )
+
+    response.raise_for_status()
+    return response.json()
+
+except httpx.HTTPStatusError as e:
+    # Handle specific errors
+    if e.response.status_code == 429:
+        retry_after = e.response.headers.get("retry-after", "60")
+        # Implement backoff
+    elif e.response.status_code == 502:
+        # Try fallback model
+    # ... handle other cases
 ```
 
 ## Python Integration
 
+### Using httpx (Recommended for FastAPI)
+
+```python
+from typing import Optional, Dict, Any, AsyncGenerator
+import httpx
+import os
+
+class OpenRouterService:
+    def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
+        self.api_key = api_key or os.getenv("OPENROUTER_API_KEY", "")
+        self.base_url = base_url or "https://openrouter.ai/api/v1"
+        self._client: Optional[httpx.AsyncClient] = None
+
+    async def _client_ctx(self) -> httpx.AsyncClient:
+        if self._client is None:
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            }
+
+            # Optional: Attribution headers for leaderboard
+            referer = os.getenv("OPENROUTER_HTTP_REFERER")
+            title = os.getenv("OPENROUTER_X_TITLE")
+            if referer:
+                headers["HTTP-Referer"] = referer
+            if title:
+                headers["X-Title"] = title
+
+            self._client = httpx.AsyncClient(
+                base_url=self.base_url,
+                headers=headers,
+                timeout=float(os.getenv("OPENROUTER_TIMEOUT", "120")),
+            )
+        return self._client
+
+    async def completion(
+        self,
+        model: str,
+        messages: list[Dict[str, Any]],
+        **params: Any,
+    ) -> Dict[str, Any]:
+        client = await self._client_ctx()
+        payload = {"model": model, "messages": messages, **params}
+
+        r = await client.post("/chat/completions", json=payload)
+
+        if r.status_code >= 400:
+            # Enhanced error handling
+            try:
+                data = r.json()
+                detail = data.get("error") or data
+            except:
+                detail = r.text
+            raise httpx.HTTPStatusError(
+                f"{r.status_code} from OpenRouter: {detail}",
+                request=r.request,
+                response=r,
+            )
+
+        r.raise_for_status()
+        return r.json()
+
+    async def stream_completion(
+        self,
+        model: str,
+        messages: list[Dict[str, Any]],
+        **params: Any,
+    ) -> AsyncGenerator[str, None]:
+        client = await self._client_ctx()
+        payload = {"model": model, "messages": messages, "stream": True, **params}
+
+        async with client.stream("POST", "/chat/completions", json=payload) as resp:
+            if resp.status_code >= 400:
+                await resp.aread()
+                try:
+                    body = resp.json().get("error") or resp.text
+                except:
+                    body = resp.text
+                raise httpx.HTTPStatusError(
+                    f"{resp.status_code} from OpenRouter: {body}",
+                    request=resp.request,
+                    response=resp
+                )
+
+            resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                if line.startswith("data: "):
+                    data = line[6:]
+                    if data == "[DONE]":
+                        break
+                    try:
+                        import json
+                        obj = json.loads(data)
+                        delta = obj.get("choices", [{}])[0].get("delta", {}).get("content")
+                        if delta:
+                            yield delta
+                    except:
+                        yield data
+
+    async def close(self) -> None:
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
+```
+
 ### Using OpenAI SDK
+
 ```python
 from openai import OpenAI
 
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
-    api_key=OPENROUTER_API_KEY,
+    api_key=os.getenv("OPENROUTER_API_KEY"),
 )
 
 completion = client.chat.completions.create(
-    model="openai/gpt-4-turbo-preview",
+    model="anthropic/claude-sonnet-4",
     messages=[
-        {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": "Write a haiku about programming"}
-    ],
-    temperature=0.7,
-    max_tokens=100
+        {"role": "user", "content": "Hello!"}
+    ]
 )
 
 print(completion.choices[0].message.content)
 ```
 
-### Using httpx (Async)
-```python
-import httpx
-import asyncio
-import json
-
-async def generate_completion(prompt: str, model: str = "openai/gpt-4-turbo-preview"):
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": model,
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.7
-            }
-        )
-        return response.json()
-
-# Usage
-result = await generate_completion("Explain quantum computing")
-```
-
-## FastAPI Service Implementation
-
-```python
-from fastapi import FastAPI, HTTPException, Depends
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
-import httpx
-from enum import Enum
-
-app = FastAPI()
-
-class ModelProvider(str, Enum):
-    OPENAI = "openai"
-    ANTHROPIC = "anthropic"
-    GOOGLE = "google"
-    META = "meta"
-
-class Message(BaseModel):
-    role: str = Field(..., pattern="^(system|user|assistant)$")
-    content: str
-
-class CompletionRequest(BaseModel):
-    model: str
-    messages: List[Message]
-    temperature: Optional[float] = 0.7
-    max_tokens: Optional[int] = 1000
-    stream: Optional[bool] = False
-    top_p: Optional[float] = 1.0
-    frequency_penalty: Optional[float] = 0
-    presence_penalty: Optional[float] = 0
-
-class OpenRouterService:
-    def __init__(self, api_key: str):
-        self.api_key = api_key
-        self.base_url = "https://openrouter.ai/api/v1"
-        self.client = httpx.AsyncClient(
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
-            }
-        )
-
-    async def list_models(self) -> Dict[str, Any]:
-        response = await self.client.get(f"{self.base_url}/models")
-        return response.json()
-
-    async def create_completion(self, request: CompletionRequest) -> Dict[str, Any]:
-        try:
-            response = await self.client.post(
-                f"{self.base_url}/chat/completions",
-                json=request.dict()
-            )
-            response.raise_for_status()
-            return response.json()
-        except httpx.HTTPStatusError as e:
-            raise HTTPException(status_code=e.response.status_code, detail=str(e))
-
-    async def create_streaming_completion(self, request: CompletionRequest):
-        request.stream = True
-        async with self.client.stream(
-            "POST",
-            f"{self.base_url}/chat/completions",
-            json=request.dict()
-        ) as response:
-            async for line in response.aiter_lines():
-                if line.startswith("data: "):
-                    data = line[6:]
-                    if data != "[DONE]":
-                        yield f"data: {data}\n\n"
-
-# Initialize service
-openrouter = OpenRouterService(api_key=OPENROUTER_API_KEY)
-
-@app.get("/api/models")
-async def get_models():
-    """List all available models from OpenRouter"""
-    return await openrouter.list_models()
-
-@app.post("/api/completions")
-async def create_completion(request: CompletionRequest):
-    """Create a chat completion"""
-    return await openrouter.create_completion(request)
-
-@app.post("/api/completions/stream")
-async def create_streaming_completion(request: CompletionRequest):
-    """Create a streaming chat completion"""
-    from fastapi.responses import StreamingResponse
-
-    return StreamingResponse(
-        openrouter.create_streaming_completion(request),
-        media_type="text/event-stream"
-    )
-```
-
 ## Advanced Features
 
 ### 1. Provider Routing
-Control how OpenRouter routes your requests:
+
+Control how requests are routed:
 
 ```json
 {
   "model": "openai/gpt-4",
-  "route": "fallback",  // Automatic fallback on errors
+  "route": "fallback",  // "fallback", "floor", "nitro"
   "provider": {
-    "order": ["openai", "together"],  // Preferred provider order
+    "order": ["openai", "together"],
     "require_parameters": true,
     "data_collection": "deny",
     "allow_fallbacks": true
@@ -310,301 +525,164 @@ Control how OpenRouter routes your requests:
 }
 ```
 
-### 2. Cost Optimization
+**Route Types:**
+- `fallback`: Automatic provider switching on errors (default)
+- `floor`: Routes to cheapest provider
+- `nitro`: Routes for fastest response time
+
+### 2. Response Format / Structured Outputs
+
+Force JSON output (OpenAI, Nitro, select models only):
+
 ```json
 {
-  "model": "openai/gpt-4",
-  "route": "floor"  // Routes to cheapest available provider
+  "response_format": {
+    "type": "json_object"
+  },
+  "messages": [
+    {
+      "role": "system",
+      "content": "You must respond with valid JSON"
+    }
+  ]
 }
 ```
 
-### 3. Performance Optimization
-```json
-{
-  "model": "openai/gpt-4",
-  "route": "nitro"  // Routes for fastest response time
-}
-```
+### 3. Prompt Caching
 
-### 4. Model-Specific Parameters
-Different models support different parameters:
+Reduce costs for repeated prompts by caching common prefixes.
+
+### 4. Attribution Headers
+
+For leaderboard and app attribution:
 
 ```python
-# For Anthropic Claude
-{
-    "model": "anthropic/claude-3-opus",
-    "messages": [...],
-    "max_tokens": 4096,
-    "temperature": 0.7,
-    "top_k": 40,  # Claude-specific
-    "top_p": 0.95
+headers = {
+    "HTTP-Referer": "https://your-app.com",
+    "X-Title": "Your App Name"
 }
-
-# For Google models
-{
-    "model": "google/gemini-pro",
-    "messages": [...],
-    "temperature": 0.7,
-    "top_k": 40,
-    "top_p": 0.95,
-    "candidate_count": 1  # Gemini-specific
-}
-```
-
-## Error Handling
-
-### Common Error Codes
-```python
-ERROR_CODES = {
-    400: "Bad Request - Invalid parameters",
-    401: "Unauthorized - Invalid API key",
-    402: "Payment Required - Insufficient credits",
-    403: "Forbidden - Access denied",
-    404: "Not Found - Model not available",
-    429: "Too Many Requests - Rate limit exceeded",
-    500: "Internal Server Error",
-    502: "Bad Gateway - Provider error",
-    503: "Service Unavailable"
-}
-
-async def handle_openrouter_error(response: httpx.Response):
-    if response.status_code != 200:
-        error_data = response.json()
-        error_message = error_data.get("error", {}).get("message", "Unknown error")
-
-        if response.status_code == 429:
-            retry_after = response.headers.get("retry-after", "60")
-            raise HTTPException(
-                status_code=429,
-                detail=f"Rate limited. Retry after {retry_after} seconds"
-            )
-
-        raise HTTPException(
-            status_code=response.status_code,
-            detail=f"{ERROR_CODES.get(response.status_code, 'Error')}: {error_message}"
-        )
-```
-
-## Rate Limiting
-
-OpenRouter implements rate limiting based on your account tier:
-
-```python
-import time
-from typing import Dict, Any
-
-class RateLimiter:
-    def __init__(self, requests_per_minute: int = 60):
-        self.requests_per_minute = requests_per_minute
-        self.requests = []
-
-    async def check_rate_limit(self):
-        now = time.time()
-        # Remove requests older than 1 minute
-        self.requests = [req for req in self.requests if req > now - 60]
-
-        if len(self.requests) >= self.requests_per_minute:
-            sleep_time = 60 - (now - self.requests[0])
-            if sleep_time > 0:
-                await asyncio.sleep(sleep_time)
-
-        self.requests.append(now)
-```
-
-## Cost Tracking
-
-Track token usage and costs:
-
-```python
-class CostTracker:
-    def __init__(self):
-        self.total_tokens = 0
-        self.total_cost = 0.0
-
-    def track_usage(self, response: Dict[str, Any], model_pricing: Dict[str, float]):
-        usage = response.get("usage", {})
-        prompt_tokens = usage.get("prompt_tokens", 0)
-        completion_tokens = usage.get("completion_tokens", 0)
-
-        # Get model pricing (per token)
-        prompt_price = model_pricing.get("prompt", 0)
-        completion_price = model_pricing.get("completion", 0)
-
-        # Calculate cost
-        prompt_cost = prompt_tokens * prompt_price
-        completion_cost = completion_tokens * completion_price
-        total_cost = prompt_cost + completion_cost
-
-        self.total_tokens += prompt_tokens + completion_tokens
-        self.total_cost += total_cost
-
-        return {
-            "tokens": {
-                "prompt": prompt_tokens,
-                "completion": completion_tokens,
-                "total": prompt_tokens + completion_tokens
-            },
-            "cost": {
-                "prompt": prompt_cost,
-                "completion": completion_cost,
-                "total": total_cost
-            },
-            "cumulative": {
-                "tokens": self.total_tokens,
-                "cost": self.total_cost
-            }
-        }
 ```
 
 ## Best Practices
 
-### 1. Use Environment Variables
+### 1. Environment Variables
 ```python
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
-
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 ```
 
-### 2. Implement Retry Logic
+### 2. Resource Cleanup
 ```python
-import backoff
-
-@backoff.on_exception(
-    backoff.expo,
-    httpx.HTTPStatusError,
-    max_tries=3,
-    max_time=30
-)
-async def make_request_with_retry(client, url, json_data):
-    response = await client.post(url, json=json_data)
-    response.raise_for_status()
-    return response.json()
+# Always close clients
+svc = OpenRouterService()
+try:
+    result = await svc.completion(...)
+finally:
+    await svc.close()
 ```
 
-### 3. Cache Model Information
+### 3. Provider-Specific Handling
+
 ```python
-from functools import lru_cache
-from datetime import datetime, timedelta
-
-class ModelCache:
-    def __init__(self, ttl_minutes: int = 60):
-        self.cache = {}
-        self.ttl = timedelta(minutes=ttl_minutes)
-
-    async def get_models(self, fetch_func):
-        now = datetime.now()
-        if "models" in self.cache:
-            cached_data, timestamp = self.cache["models"]
-            if now - timestamp < self.ttl:
-                return cached_data
-
-        data = await fetch_func()
-        self.cache["models"] = (data, now)
-        return data
-```
-
-### 4. Monitor Performance
-```python
-import logging
-from time import time
-
-logger = logging.getLogger(__name__)
-
-async def timed_request(func, *args, **kwargs):
-    start = time()
+def _provider_id_from_model(model_id: str | None) -> str:
+    """Extract provider prefix from model ID."""
     try:
-        result = await func(*args, **kwargs)
-        duration = time() - start
-        logger.info(f"Request completed in {duration:.2f}s")
-        return result
-    except Exception as e:
-        duration = time() - start
-        logger.error(f"Request failed after {duration:.2f}s: {e}")
+        return (model_id or "").split("/")[0].split(":")[0].replace("-", "")
+    except:
+        return ""
+
+# Use for provider-specific logic
+provider = _provider_id_from_model("xai/grok-4")
+if provider == "xai":
+    # Skip forced tool_choice for xAI
+    tool_choice = "auto"
+```
+
+### 4. Error Handling
+
+```python
+try:
+    response = await svc.completion(model=model, messages=messages)
+except httpx.HTTPStatusError as e:
+    if e.response.status_code == 502:
+        # Provider down - try fallback
+        response = await svc.completion(model=fallback_model, messages=messages)
+    elif e.response.status_code == 429:
+        # Rate limited - implement backoff
+        await asyncio.sleep(60)
+        response = await svc.completion(model=model, messages=messages)
+    else:
         raise
+```
+
+### 5. Tool Calling Iteration Limits
+
+```python
+max_iterations = 5
+iteration = 0
+
+while iteration < max_iterations:
+    response = await svc.completion(model=model, messages=messages, tools=tools)
+
+    tool_calls = response["choices"][0]["message"].get("tool_calls")
+    if not tool_calls:
+        break  # Final answer
+
+    # Execute tools and add results to messages
+    for tool_call in tool_calls:
+        result = execute_tool(tool_call)
+        messages.append({
+            "role": "tool",
+            "tool_call_id": tool_call["id"],
+            "content": json.dumps(result)
+        })
+
+    iteration += 1
 ```
 
 ## Pricing
 
 ### Fee Structure (2025)
-- **Credit Purchase Fee**: 5.5% (minimum $0.80)
+- **Credit Purchase**: 5.5% fee (minimum $0.80)
 - **Crypto Payments**: 5% fee
 - **BYOK (Bring Your Own Key)**:
   - First 1M requests/month: Free
-  - After 1M requests: 5% of standard cost
+  - After 1M: 5% of standard cost
 
-### Model Pricing Examples
+### Example Pricing (per token)
 ```python
 MODEL_PRICING = {
-    "openai/gpt-4-turbo-preview": {
-        "prompt": 0.00001,      # per token
-        "completion": 0.00003    # per token
+    "openai/gpt-4o": {
+        "prompt": 0.0000025,
+        "completion": 0.000010
     },
-    "anthropic/claude-3-opus": {
-        "prompt": 0.000015,
-        "completion": 0.000075
+    "anthropic/claude-sonnet-4": {
+        "prompt": 0.000003,
+        "completion": 0.000015
     },
-    "google/gemini-pro": {
-        "prompt": 0.0000005,
-        "completion": 0.0000015
-    },
-    "meta/llama-3-70b": {
-        "prompt": 0.0000008,
-        "completion": 0.0000008
+    "google/gemini-2.0-flash": {
+        "prompt": 0.00000010,
+        "completion": 0.00000040
     }
 }
 ```
 
-## Compliance and Privacy
+## Rate Limits
 
-### Data Privacy Settings
-```json
-{
-  "provider": {
-    "data_collection": "deny",  // Prevent data collection
-    "moderation": false         // Disable content moderation
-  }
-}
+Rate limits vary by account tier. Check current limits at:
 ```
-
-### Zero Data Retention (ZDR)
-Enable ZDR for sensitive data:
-```python
-headers = {
-    "Authorization": f"Bearer {API_KEY}",
-    "X-Zero-Data-Retention": "true"
-}
+https://openrouter.ai/docs/api-reference/limits
 ```
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Authentication Errors**
-   - Verify API key is correct
-   - Check if key has sufficient permissions
-   - Ensure proper header format
-
-2. **Rate Limiting**
-   - Implement exponential backoff
-   - Check retry-after header
-   - Consider upgrading account tier
-
-3. **Model Availability**
-   - Some models may be temporarily unavailable
-   - Use fallback models
-   - Check model status endpoint
-
-4. **Streaming Issues**
-   - Ensure proper SSE parsing
-   - Handle connection timeouts
-   - Implement reconnection logic
 
 ## Additional Resources
-- [OpenRouter Documentation](https://openrouter.ai/docs)
-- [API Reference](https://openrouter.ai/docs/api-reference)
-- [Model Catalog](https://openrouter.ai/models)
-- [Pricing Calculator](https://openrouter.ai/pricing)
-- [Status Page](https://status.openrouter.ai/)
+
+- **Main Documentation**: https://openrouter.ai/docs
+- **API Reference**: https://openrouter.ai/docs/api-reference
+- **Model Catalog**: https://openrouter.ai/models
+- **Tool-Compatible Models**: https://openrouter.ai/models?supported_parameters=tools
+- **Pricing Calculator**: https://openrouter.ai/pricing
+- **Status Page**: https://status.openrouter.ai/
+- **FAQ**: https://openrouter.ai/docs/faq
