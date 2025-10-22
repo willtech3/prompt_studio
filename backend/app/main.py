@@ -380,11 +380,17 @@ async def stream_chat(
                     # If the prompt clearly implies fresh/current data and search_web is available,
                     # nudge the first iteration to call search_web explicitly by setting tool_choice
                     # to the function object. This keeps behavior minimal and scoped to iteration 1.
+                    # Skip for xAI: known OpenRouter/xAI compatibility issues with forced tool_choice
+                    # (see GitHub issues #34185, #36994 in zed-industries/zed)
+                    provider_prefix = (model or "").split("/")[0].split(":")[0].replace("-", "")
+                    skip_forced_tool_choice = provider_prefix in {"xai"}
+
                     if (
                         iteration == 1
                         and implies_needs_tools
                         and "search_web" in tool_names
                         and call_params.get("tool_choice") == "auto"
+                        and not skip_forced_tool_choice
                     ):
                         call_params["tool_choice"] = {
                             "type": "function",
@@ -448,7 +454,7 @@ async def stream_chat(
                                 func_args = {}
 
                             # If search is used and the prompt asks for a timeframe, add a dynamic, non-hardcoded hint
-                            if func_name == 'search_web' and ('get_current_time' in tool_names or True):
+                            if func_name == 'search_web':
                                 try:
                                     hint = parse_time_constraints(f"{system or ''} \n {prompt}")
                                     # Do not override model-provided constraints
@@ -893,6 +899,8 @@ async def optimize_prompt(req: OptimizeRequest, session: AsyncSession = Depends(
 
     if "# " in optimized_prompt or "## " in optimized_prompt:
         notes.append("Added section headers for organization")
+
+    await svc.close()
 
     return OptimizeResponse(
         optimized=optimized_prompt,
