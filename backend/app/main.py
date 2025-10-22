@@ -3,7 +3,6 @@ import datetime as dt
 import json
 import os
 import re
-import uuid
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -14,10 +13,8 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from config.db import create_all, get_session, init_engine, try_get_session
+from config.db import create_all, get_session, init_engine
 from models.model_config import ModelConfig
-from models.snapshot import Snapshot
-from services.model_catalog import refresh_model_catalog
 from services.openrouter import OpenRouterService
 from services.tool_executor import ToolExecutor
 

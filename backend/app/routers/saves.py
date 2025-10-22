@@ -1,11 +1,12 @@
-from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-import uuid
 import datetime as dt
+import uuid
 
-from config.db import create_all, try_get_session
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from config.db import try_get_session
 from models.snapshot import Snapshot
 
 router = APIRouter(prefix="/api/saves", tags=["saves"])
@@ -27,7 +28,7 @@ class SaveResponse(BaseModel):
     kind: str
     provider: str | None = None
     model: str | None = None
-    created_at: str
+    created_at: dt.datetime
 
 
 class SaveItem(BaseModel):
@@ -36,7 +37,7 @@ class SaveItem(BaseModel):
     kind: str
     provider: str | None = None
     model: str | None = None
-    created_at: str
+    created_at: dt.datetime | None = None
 
 
 # Endpoints
@@ -45,7 +46,6 @@ class SaveItem(BaseModel):
 async def create_save(payload: SaveRequest, session: AsyncSession | None = Depends(try_get_session)):
     if session is None:
         raise HTTPException(status_code=400, detail="DATABASE_URL not configured")
-    await create_all()
     sid = str(uuid.uuid4())
     kind = payload.kind or "state"
     snap = Snapshot(
@@ -58,18 +58,35 @@ async def create_save(payload: SaveRequest, session: AsyncSession | None = Depen
     )
     session.add(snap)
     await session.commit()
-    return SaveResponse(id=sid, title=payload.title, kind=kind, provider=payload.provider, model=payload.model, created_at=dt.datetime.utcnow().isoformat())
+    # Refresh to ensure DB-assigned timestamps are returned
+    await session.refresh(snap)
+    return SaveResponse(
+        id=sid,
+        title=payload.title,
+        kind=kind,
+        provider=payload.provider,
+        model=payload.model,
+        created_at=snap.created_at,
+    )
 
 
 @router.get("", response_model=list[SaveItem])
 async def list_saves(session: AsyncSession | None = Depends(try_get_session)):
     if session is None:
         raise HTTPException(status_code=400, detail="DATABASE_URL not configured")
-    await create_all()
     rows = (await session.execute(select(Snapshot).order_by(Snapshot.created_at.desc()))).scalars().all()
     out: list[SaveItem] = []
     for r in rows:
-        out.append(SaveItem(id=r.id, title=r.title, kind=r.kind, provider=r.provider, model=r.model, created_at=(r.created_at.isoformat() if r.created_at else "")))
+        out.append(
+            SaveItem(
+                id=r.id,
+                title=r.title,
+                kind=r.kind,
+                provider=r.provider,
+                model=r.model,
+                created_at=r.created_at,
+            )
+        )
     return out
 
 
@@ -86,6 +103,6 @@ async def get_save(sid: str, session: AsyncSession | None = Depends(try_get_sess
         "kind": row.kind,
         "provider": row.provider,
         "model": row.model,
-        "created_at": row.created_at.isoformat() if row.created_at else "",
+        "created_at": row.created_at,
         "data": row.data or {},
     }
