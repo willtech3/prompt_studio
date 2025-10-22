@@ -67,6 +67,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.on_event("startup")
+async def _ensure_db_tables() -> None:
+    """Create DB tables on startup (best-effort for dev)."""
+    try:
+        await create_all()
+    except Exception:
+        # Do not block app startup in dev if DB is unavailable
+        pass
+
 # Register placeholder routers (no behavior changes)
 app.include_router(chat_routes.router)
 app.include_router(model_routes.router)

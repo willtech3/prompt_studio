@@ -3,18 +3,30 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from config.db import get_session, create_all
+from config.db import get_session
 from models.provider_content import ProviderContent
 from models.model_config import ModelConfig
 
 router = APIRouter(prefix="/api/providers", tags=["providers"])
 
 
+def _display_name(provider_id: str) -> str:
+    mapping = {
+        "xai": "xAI",
+        "openai": "OpenAI",
+        "anthropic": "Anthropic",
+        "google": "Google",
+        "mistral": "Mistral",
+        "meta": "Meta",
+        "perplexity": "Perplexity",
+        "cohere": "Cohere",
+    }
+    return mapping.get(provider_id, provider_id.title())
+
+
 @router.get("")
 async def list_providers(session: AsyncSession = Depends(get_session)):
     """Return list of supported providers with their model counts."""
-    await create_all()
-
     # Get all models and extract unique providers
     models = (await session.execute(select(ModelConfig))).scalars().all()
     provider_counts: dict[str, int] = {}
@@ -35,7 +47,7 @@ async def list_providers(session: AsyncSession = Depends(get_session)):
     for provider_id in supported:
         providers.append({
             "id": provider_id,
-            "name": provider_id.title(),
+            "name": _display_name(provider_id),
             "model_count": provider_counts.get(provider_id, 0)
         })
 
@@ -44,8 +56,7 @@ async def list_providers(session: AsyncSession = Depends(get_session)):
 
 @router.get("/{provider_id}/guide")
 async def get_provider_guide(provider_id: str, session: AsyncSession = Depends(get_session)):
-    """Return optimization guide for a provider."""
-    await create_all()
+    """Return optimization guide for a provider as a structured object."""
     row = (await session.execute(
         select(ProviderContent)
         .where(ProviderContent.provider_id == provider_id)
@@ -55,7 +66,7 @@ async def get_provider_guide(provider_id: str, session: AsyncSession = Depends(g
     if not row:
         raise HTTPException(status_code=404, detail="Provider guide not found")
 
-    return row.content
+    return {"title": row.title, "content": row.content, "doc_url": row.doc_url}
 
 
 @router.get("/{provider_id}/prompting-guides")
@@ -65,8 +76,6 @@ async def get_provider_prompting_guides(
     session: AsyncSession = Depends(get_session)
 ):
     """Return prompting guides for a provider, optionally filtered by model."""
-    await create_all()
-
     # Build query for general provider guidance (model_id IS NULL)
     query = (
         select(ProviderContent)
