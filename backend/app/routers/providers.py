@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,29 +38,37 @@ async def list_providers(session: AsyncSession = Depends(get_session)):
             provider_counts[provider] = provider_counts.get(provider, 0) + 1
 
     # Filter to only supported providers (those with content)
-    supported = (await session.execute(
-        select(ProviderContent.provider_id).distinct()
-    )).scalars().all()
+    supported = (
+        (await session.execute(select(ProviderContent.provider_id).distinct()))
+        .scalars()
+        .all()
+    )
 
     providers = []
     for provider_id in supported:
-        providers.append({
-            "id": provider_id,
-            "name": _display_name(provider_id),
-            "model_count": provider_counts.get(provider_id, 0)
-        })
+        providers.append(
+            {
+                "id": provider_id,
+                "name": _display_name(provider_id),
+                "model_count": provider_counts.get(provider_id, 0),
+            }
+        )
 
     return {"data": sorted(providers, key=lambda p: p["id"])}
 
 
 @router.get("/{provider_id}/guide")
-async def get_provider_guide(provider_id: str, session: AsyncSession = Depends(get_session)):
+async def get_provider_guide(
+    provider_id: str, session: AsyncSession = Depends(get_session)
+):
     """Return optimization guide for a provider as a structured object."""
-    row = (await session.execute(
-        select(ProviderContent)
-        .where(ProviderContent.provider_id == provider_id)
-        .where(ProviderContent.content_type == "optimization_guide")
-    )).scalar_one_or_none()
+    row = (
+        await session.execute(
+            select(ProviderContent)
+            .where(ProviderContent.provider_id == provider_id)
+            .where(ProviderContent.content_type == "optimization_guide")
+        )
+    ).scalar_one_or_none()
 
     if not row:
         raise HTTPException(status_code=404, detail="Provider guide not found")
@@ -72,8 +79,10 @@ async def get_provider_guide(provider_id: str, session: AsyncSession = Depends(g
 @router.get("/{provider_id}/prompting-guides")
 async def get_provider_prompting_guides(
     provider_id: str,
-    model_id: str | None = Query(None, description="Optional model ID for model-specific guidance"),
-    session: AsyncSession = Depends(get_session)
+    model_id: str | None = Query(
+        None, description="Optional model ID for model-specific guidance"
+    ),
+    session: AsyncSession = Depends(get_session),
 ):
     """Return prompting guides for a provider, optionally filtered by model."""
     # Build query for general provider guidance (model_id IS NULL)
@@ -86,12 +95,14 @@ async def get_provider_prompting_guides(
     general_row = (await session.execute(query)).scalar_one_or_none()
 
     if not general_row:
-        raise HTTPException(status_code=404, detail="Provider prompting guides not found")
+        raise HTTPException(
+            status_code=404, detail="Provider prompting guides not found"
+        )
 
     result = {
         "title": general_row.title,
         "content": general_row.content,
-        "doc_url": general_row.doc_url
+        "doc_url": general_row.doc_url,
     }
 
     # If model_id provided, fetch and append model-specific guidance
@@ -107,7 +118,7 @@ async def get_provider_prompting_guides(
             result["model_specific"] = {
                 "title": model_row.title,
                 "content": model_row.content,
-                "doc_url": model_row.doc_url
+                "doc_url": model_row.doc_url,
             }
 
     return result

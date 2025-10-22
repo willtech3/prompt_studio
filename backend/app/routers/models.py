@@ -16,10 +16,14 @@ router = APIRouter(prefix="/api/models", tags=["models"])
 async def list_models(session: AsyncSession = Depends(get_session)):
     """Return available models from database."""
     rows = (
-        await session.execute(
-            select(ModelConfig).order_by(ModelConfig.provider, ModelConfig.model_id)
+        (
+            await session.execute(
+                select(ModelConfig).order_by(ModelConfig.provider, ModelConfig.model_id)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return {"data": [r.raw or {"id": r.model_id, "name": r.model_name} for r in rows]}
 
 

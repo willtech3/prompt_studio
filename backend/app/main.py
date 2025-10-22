@@ -81,6 +81,7 @@ async def _ensure_db_tables() -> None:
     with contextlib.suppress(Exception):
         await create_all()
 
+
 # Register placeholder routers (no behavior changes)
 app.include_router(chat_routes.router)
 app.include_router(model_routes.router)
@@ -108,14 +109,27 @@ async def stream_chat(
     model: str = Query(..., description="Model ID to use"),
     prompt: str = Query("", description="User prompt content"),
     system: str | None = Query(None, description="Optional system prompt"),
-    temperature: float | None = Query(0.7, ge=0, le=2, description="Sampling temperature"),
+    temperature: float | None = Query(
+        0.7, ge=0, le=2, description="Sampling temperature"
+    ),
     max_tokens: int | None = Query(None, ge=1, description="Max tokens for completion"),
     top_p: float | None = Query(1.0, ge=0, le=1, description="Nucleus sampling"),
-    reasoning_effort: str | None = Query(None, description="Reasoning effort: low|medium|high"),
+    reasoning_effort: str | None = Query(
+        None, description="Reasoning effort: low|medium|high"
+    ),
     # Tool calling parameters
-    tools: str | None = Query(None, description="JSON-encoded array of tool schemas (OpenAI format)"),
-    tool_choice: str | None = Query("auto", description="Tool choice: 'auto', 'required', 'none', or tool name"),
-    max_tool_calls: int = Query(5, ge=1, le=20, description="Maximum tool call iterations to prevent infinite loops"),
+    tools: str | None = Query(
+        None, description="JSON-encoded array of tool schemas (OpenAI format)"
+    ),
+    tool_choice: str | None = Query(
+        "auto", description="Tool choice: 'auto', 'required', 'none', or tool name"
+    ),
+    max_tool_calls: int = Query(
+        5,
+        ge=1,
+        le=20,
+        description="Maximum tool call iterations to prevent infinite loops",
+    ),
     # Additional tunable parameters (pass-through when provided)
     top_k: int | None = Query(None, description="Top-K sampling"),
     frequency_penalty: float | None = Query(None, description="Frequency penalty"),
@@ -124,11 +138,21 @@ async def stream_chat(
     min_p: float | None = Query(None, description="Minimum probability threshold"),
     top_a: float | None = Query(None, description="Top-A sampling"),
     seed: int | None = Query(None, description="Deterministic seed"),
-    response_format: str | None = Query(None, description="Response format, e.g. json or json_object"),
-    stop: str | None = Query(None, description="Comma or newline-separated stop sequences"),
-    logprobs: bool | None = Query(None, description="Return log probabilities of tokens"),
-    top_logprobs: int | None = Query(None, description="How many top tokens to include in logprobs"),
-    logit_bias: str | None = Query(None, description="JSON object mapping token IDs to bias values"),
+    response_format: str | None = Query(
+        None, description="Response format, e.g. json or json_object"
+    ),
+    stop: str | None = Query(
+        None, description="Comma or newline-separated stop sequences"
+    ),
+    logprobs: bool | None = Query(
+        None, description="Return log probabilities of tokens"
+    ),
+    top_logprobs: int | None = Query(
+        None, description="How many top tokens to include in logprobs"
+    ),
+    logit_bias: str | None = Query(
+        None, description="JSON object mapping token IDs to bias values"
+    ),
     session: AsyncSession = Depends(get_session),
 ):
     def parse_time_constraints(text: str) -> dict | None:
@@ -163,7 +187,11 @@ async def stream_chat(
 
             # Named spans
             if re.search(r"\btoday\b", text_l):
-                return {"time_hint": "day", "after": now.strftime("%Y-%m-%d"), "days_ago": 1}
+                return {
+                    "time_hint": "day",
+                    "after": now.strftime("%Y-%m-%d"),
+                    "days_ago": 1,
+                }
             if re.search(r"\byesterday\b", text_l):
                 d = (now - dt.timedelta(days=1)).strftime("%Y-%m-%d")
                 return {"time_hint": "day", "after": d, "days_ago": 1}
@@ -171,7 +199,9 @@ async def stream_chat(
                 start = (now - dt.timedelta(days=now.weekday())).strftime("%Y-%m-%d")
                 return {"time_hint": "week", "after": start, "days_ago": 7}
             if re.search(r"\blast\s+week\b", text_l):
-                start = (now - dt.timedelta(days=now.weekday()+7)).strftime("%Y-%m-%d")
+                start = (now - dt.timedelta(days=now.weekday() + 7)).strftime(
+                    "%Y-%m-%d"
+                )
                 return {"time_hint": "week", "after": start, "days_ago": 7}
             if re.search(r"\bthis\s+month\b", text_l):
                 start = now.replace(day=1).strftime("%Y-%m-%d")
@@ -183,7 +213,10 @@ async def stream_chat(
                 return {"time_hint": "month", "after": start, "days_ago": 30}
 
             # Relative: last/past N days|weeks|months|years
-            m = re.search(r"\b(last|past|in\s+the\s+last)\s+(\d{1,3})\s+(day|days|week|weeks|month|months|year|years)\b", text_l)
+            m = re.search(
+                r"\b(last|past|in\s+the\s+last)\s+(\d{1,3})\s+(day|days|week|weeks|month|months|year|years)\b",
+                text_l,
+            )
             if m:
                 n = int(m.group(2))
                 unit = m.group(3)
@@ -207,11 +240,12 @@ async def stream_chat(
                 return {
                     "time_hint": time_hint,
                     "after": (now - delta).strftime("%Y-%m-%d"),
-                    "days_ago": days
+                    "days_ago": days,
                 }
         except Exception:
             return None
         return None
+
     async def generate():
         sent_any_content = False
         # If no API key is set, return a helpful message.
@@ -224,9 +258,11 @@ async def stream_chat(
         if effective_max_tokens is None:
             try:
                 await create_all()
-                model_config = (await session.execute(
-                    select(ModelConfig).where(ModelConfig.model_id == model)
-                )).scalar_one_or_none()
+                model_config = (
+                    await session.execute(
+                        select(ModelConfig).where(ModelConfig.model_id == model)
+                    )
+                ).scalar_one_or_none()
 
                 if model_config and model_config.max_completion_tokens:
                     effective_max_tokens = model_config.max_completion_tokens
@@ -255,7 +291,7 @@ async def stream_chat(
                 # Collect function names for fast checks (e.g., time/search availability)
                 for t in tool_schemas:
                     try:
-                        n = t.get('function', {}).get('name')
+                        n = t.get("function", {}).get("name")
                         if n:
                             tool_names.add(n)
                     except Exception:
@@ -278,7 +314,11 @@ async def stream_chat(
                     parts = []
                     for block in content:
                         # Prefer text blocks for final answer
-                        if isinstance(block, dict) and block.get("type") == "text" and isinstance(block.get("text"), str):
+                        if (
+                            isinstance(block, dict)
+                            and block.get("type") == "text"
+                            and isinstance(block.get("text"), str)
+                        ):
                             parts.append(block.get("text", ""))
                     return "\n".join([p for p in parts if p])
             except Exception:
@@ -355,7 +395,9 @@ async def stream_chat(
                 # Allow unrestricted looping when tool_choice is 'auto' but guard with a soft ceiling
                 # If max_tool_calls is set high by client we honor it; otherwise use a generous default
                 limit = max_tool_calls or 20
-                should_force_tools_first_turn = False  # Track if we tried to force tools
+                should_force_tools_first_turn = (
+                    False  # Track if we tried to force tools
+                )
                 while iteration < limit:
                     iteration += 1
 
@@ -363,15 +405,26 @@ async def stream_chat(
                     call_params = params.copy()
                     call_params["tools"] = tool_schemas
                     # Make search required on the first turn when present and prompt implies it needs current data
-                    wants_search = ("search_web" in tool_names)
+                    wants_search = "search_web" in tool_names
                     prompt_lower = (prompt or "").lower()
 
                     # Check if prompt explicitly asks for searches, news, or recent information
-                    implies_needs_tools = (
-                        wants_search and (
-                            any(k in prompt_lower for k in ["news", "latest", "recent", "current", "last ", "past ", "find", "look up", "search"]) or
-                            bool(parse_time_constraints(f"{system or ''} {prompt}"))
+                    implies_needs_tools = wants_search and (
+                        any(
+                            k in prompt_lower
+                            for k in [
+                                "news",
+                                "latest",
+                                "recent",
+                                "current",
+                                "last ",
+                                "past ",
+                                "find",
+                                "look up",
+                                "search",
+                            ]
                         )
+                        or bool(parse_time_constraints(f"{system or ''} {prompt}"))
                     )
 
                     # Sanitize tool_choice for OpenAI-compatible Chat Completions:
@@ -390,7 +443,9 @@ async def stream_chat(
                             # Unknown tool name -> fall back to auto
                             call_params["tool_choice"] = "auto"
                     else:
-                        call_params["tool_choice"] = "auto" if tool_choice != "none" else "none"
+                        call_params["tool_choice"] = (
+                            "auto" if tool_choice != "none" else "none"
+                        )
 
                     # If the prompt clearly implies fresh/current data and search_web is available,
                     # nudge the first iteration to call search_web explicitly by setting tool_choice
@@ -415,9 +470,7 @@ async def stream_chat(
 
                     # Call model (non-streaming for tool use)
                     response = await svc.completion(
-                        model=model,
-                        messages=messages,
-                        **call_params
+                        model=model, messages=messages, **call_params
                     )
 
                     message = response.get("choices", [{}])[0].get("message", {})
@@ -425,9 +478,14 @@ async def stream_chat(
                     # Check for reasoning content (e.g., Claude's extended thinking)
                     # Some models return content blocks with thinking before tool calls
                     reasoning_content = None
-                    if (content_blocks := message.get("content")) and isinstance(content_blocks, list):
+                    if (content_blocks := message.get("content")) and isinstance(
+                        content_blocks, list
+                    ):
                         for block in content_blocks:
-                            if isinstance(block, dict) and block.get("type") == "thinking":
+                            if (
+                                isinstance(block, dict)
+                                and block.get("type") == "thinking"
+                            ):
                                 reasoning_content = block.get("thinking", "")
                                 break
 
@@ -440,11 +498,13 @@ async def stream_chat(
                         # Notify frontend about tool calls
                         tool_call_info = []
                         for tc in tool_calls:
-                            tool_call_info.append({
-                                "id": tc.get("id", "unknown"),
-                                "name": tc["function"]["name"],
-                                "arguments": tc["function"]["arguments"]
-                            })
+                            tool_call_info.append(
+                                {
+                                    "id": tc.get("id", "unknown"),
+                                    "name": tc["function"]["name"],
+                                    "arguments": tc["function"]["arguments"],
+                                }
+                            )
 
                         yield f"data: {json.dumps({'type': 'tool_calls', 'calls': tool_call_info})}\n\n"
 
@@ -467,12 +527,14 @@ async def stream_chat(
                                 func_args = {}
 
                             # If search is used and the prompt asks for a timeframe, add a dynamic, non-hardcoded hint
-                            if func_name == 'search_web':
+                            if func_name == "search_web":
                                 try:
-                                    hint = parse_time_constraints(f"{system or ''} \n {prompt}")
+                                    hint = parse_time_constraints(
+                                        f"{system or ''} \n {prompt}"
+                                    )
                                     # Do not override model-provided constraints
                                     if hint:
-                                        for k in ('time_hint','after','before'):
+                                        for k in ("time_hint", "after", "before"):
                                             if k not in func_args:
                                                 v = hint.get(k)
                                                 if v:
@@ -494,20 +556,30 @@ async def stream_chat(
                                 tool_content = json.dumps(result.get("result", {}))
                             else:
                                 # Tool failed - provide error message
-                                tool_content = json.dumps({"error": result.get("error", "Tool execution failed")})
+                                tool_content = json.dumps(
+                                    {
+                                        "error": result.get(
+                                            "error", "Tool execution failed"
+                                        )
+                                    }
+                                )
 
-                            messages.append({
-                                "role": "tool",
-                                "tool_call_id": tool_call.get("id", "unknown"),
-                                "content": tool_content,
-                            })
+                            messages.append(
+                                {
+                                    "role": "tool",
+                                    "tool_call_id": tool_call.get("id", "unknown"),
+                                    "content": tool_content,
+                                }
+                            )
 
                         # Add a gentle reminder to the model that it has tool results to use
                         # This helps models that might otherwise claim they don't have web access
-                        messages.append({
-                            "role": "user",
-                            "content": "Please use the tool results above to answer my original question."
-                        })
+                        messages.append(
+                            {
+                                "role": "user",
+                                "content": "Please use the tool results above to answer my original question.",
+                            }
+                        )
 
                         # After executing tools, force the model to respond with text (no more tool calls)
                         # Try non-streaming first for faster response, fall back to streaming if needed
@@ -516,8 +588,12 @@ async def stream_chat(
                         try:
                             # Attempt 1: Non-streaming with tool_choice='none' to force text response
                             finalize_params = params.copy()
-                            finalize_params["tools"] = tool_schemas  # Keep tools available but don't use them
-                            finalize_params["tool_choice"] = "none"  # Prevent further tool calls
+                            finalize_params["tools"] = (
+                                tool_schemas  # Keep tools available but don't use them
+                            )
+                            finalize_params["tool_choice"] = (
+                                "none"  # Prevent further tool calls
+                            )
 
                             finalize_response = await svc.completion(
                                 model=model,
@@ -525,8 +601,12 @@ async def stream_chat(
                                 **finalize_params,
                             )
 
-                            finalize_message = finalize_response.get("choices", [{}])[0].get("message", {})
-                            finalize_content = _content_to_text(finalize_message.get("content", ""))
+                            finalize_message = finalize_response.get("choices", [{}])[
+                                0
+                            ].get("message", {})
+                            finalize_content = _content_to_text(
+                                finalize_message.get("content", "")
+                            )
 
                             if finalize_content:
                                 yield f"data: {json.dumps({'type': 'content', 'content': finalize_content})}\n\n"
@@ -544,7 +624,9 @@ async def stream_chat(
                                 # Don't include tools parameter to prevent more tool calls
 
                                 final_content_parts = []
-                                async for chunk in svc.stream_completion(model=model, messages=messages, **stream_params):
+                                async for chunk in svc.stream_completion(
+                                    model=model, messages=messages, **stream_params
+                                ):
                                     final_content_parts.append(chunk)
                                     yield f"data: {json.dumps({'type': 'content', 'content': chunk})}\n\n"
                                     sent_any_content = True
@@ -567,7 +649,9 @@ async def stream_chat(
                         content = _content_to_text(message.get("content", ""))
 
                         # Track if we've executed any tools in this run
-                        any_tools_executed = any(True for msg in messages if msg.get("role") == "tool")
+                        any_tools_executed = any(
+                            True for msg in messages if msg.get("role") == "tool"
+                        )
 
                         if content:
                             # If iteration 1 with tool_choice=required/any and model still responded with text,
@@ -575,7 +659,11 @@ async def stream_chat(
                             # Send the response to the user (don't suppress it).
 
                             # Only suppress on iteration 2 if we tried to force tools but model didn't call them
-                            if iteration == 2 and not any_tools_executed and should_force_tools_first_turn:
+                            if (
+                                iteration == 2
+                                and not any_tools_executed
+                                and should_force_tools_first_turn
+                            ):
                                 # Give model one more chance to call tools
                                 messages.append(message)
                                 continue  # Silent continuation - no text sent to user
@@ -604,7 +692,9 @@ async def stream_chat(
 
             else:
                 # Regular streaming without tools
-                async for chunk in svc.stream_completion(model=model, messages=messages, **params):
+                async for chunk in svc.stream_completion(
+                    model=model, messages=messages, **params
+                ):
                     # Wrap chunk in JSON format expected by frontend
                     yield f"data: {json.dumps({'type': 'content', 'content': chunk})}\n\n"
                     sent_any_content = True
@@ -675,22 +765,18 @@ PROVIDER_HINTS = {
     "anthropic": """Claude models work best with XML-style tags like <instructions>, <context>, <thinking>, and <output>. Use explicit thinking blocks for complex reasoning tasks.
 
     For tool calling: Claude Sonnet 4.5 supports parallel tool execution (up to 5 tools simultaneously). Use <thinking> blocks to reason about which tools to call and why. Example: '<thinking>I need current data, so I'll call search_web first, then analyze the results.</thinking>'""",
-
     "openai": """GPT models benefit from clear delimiters (triple quotes, <<<>>>), step-by-step instructions, specific role definitions, and explicit output format specifications.
 
     For tool calling: GPT-4+ supports parallel function calling (up to 10 tools). Be explicit about when to use tools: 'Use search_web for current information, then calculate for math.' Provide clear, detailed function descriptions in your tool schemas.""",
-
     "deepseek": """DeepSeek-R1 models benefit from explicit <think> tags for reasoning tasks. Be explicit about showing work and breaking down complex queries into sequential prompts.
 
     For tool calling: DeepSeek models work well with sequential tool calls. Use explicit reasoning: 'First, I'll search for X using search_web. Then, based on those results, I'll calculate Y.' Break complex multi-tool workflows into clear steps.""",
-
     "google": """Gemini models work well with structured sections, explicit role definitions, and grounding passages. Specify token budgets and use numbered outputs.
 
     For tool calling: Gemini supports function declarations. Use structured, numbered instructions: '1. Search for current data using search_web. 2. Extract key metrics. 3. Format results as JSON.' Be explicit about output format expectations.""",
-
     "xai": """Grok models prefer explicit JSON schemas for structured output, clear role definitions, and tuning one parameter at a time.
 
-    For tool calling: Grok models benefit from clear tool usage instructions. Specify exact function names and expected parameters. Example: 'When asked about current events, call search_web with the query parameter. When asked for calculations, call calculate with the expression parameter.'"""
+    For tool calling: Grok models benefit from clear tool usage instructions. Specify exact function names and expected parameters. Example: 'When asked about current events, call search_web with the query parameter. When asked for calculations, call calculate with the expression parameter.'""",
 }
 
 
@@ -709,7 +795,9 @@ class OptimizeResponse(BaseModel):
 
 
 @app.post("/api/optimize", response_model=OptimizeResponse)
-async def optimize_prompt(req: OptimizeRequest, _session: AsyncSession = Depends(get_session)):
+async def optimize_prompt(
+    req: OptimizeRequest, _session: AsyncSession = Depends(get_session)
+):
     if not os.getenv("OPENROUTER_API_KEY"):
         raise HTTPException(status_code=400, detail="OPENROUTER_API_KEY not set")
 
@@ -725,12 +813,16 @@ async def optimize_prompt(req: OptimizeRequest, _session: AsyncSession = Depends
 
     # Add provider-specific guidance as context
     if provider_hint:
-        user_parts.append(f"Provider context: This prompt will be used with {req.model} ({provider_id}). {provider_hint}")
+        user_parts.append(
+            f"Provider context: This prompt will be used with {req.model} ({provider_id}). {provider_hint}"
+        )
         user_parts.append("")
 
     # Add system context if optimizing a user prompt
     if req.system and req.kind == "user":
-        user_parts.append("System prompt context (for reference only, do not optimize this):")
+        user_parts.append(
+            "System prompt context (for reference only, do not optimize this):"
+        )
         user_parts.append(req.system)
         user_parts.append("")
 
@@ -762,7 +854,7 @@ async def optimize_prompt(req: OptimizeRequest, _session: AsyncSession = Depends
             return OptimizeResponse(
                 optimized=req.prompt,
                 notes=["Optimization failed: empty response from model"],
-                changes=[]
+                changes=[],
             )
 
         # Extract changes and notes from comparison
@@ -778,9 +870,13 @@ async def optimize_prompt(req: OptimizeRequest, _session: AsyncSession = Depends
             changes.append("Refined prompt structure and wording")
 
         # Check for provider-specific patterns
-        if provider_id == "anthropic" and ("<" in optimized_prompt and ">" in optimized_prompt):
+        if provider_id == "anthropic" and (
+            "<" in optimized_prompt and ">" in optimized_prompt
+        ):
             notes.append("Added XML-style tags for better structure")
-        elif provider_id == "openai" and ("```" in optimized_prompt or "<<<" in optimized_prompt):
+        elif provider_id == "openai" and (
+            "```" in optimized_prompt or "<<<" in optimized_prompt
+        ):
             notes.append("Added delimiters for clear input/output separation")
         elif provider_id == "deepseek" and "<think>" in optimized_prompt.lower():
             notes.append("Added thinking blocks for reasoning tasks")
@@ -789,9 +885,7 @@ async def optimize_prompt(req: OptimizeRequest, _session: AsyncSession = Depends
             notes.append("Added section headers for organization")
 
         return OptimizeResponse(
-            optimized=optimized_prompt,
-            changes=changes,
-            notes=notes
+            optimized=optimized_prompt, changes=changes, notes=notes
         )
     finally:
         await svc.close()

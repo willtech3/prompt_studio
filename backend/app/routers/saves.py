@@ -14,12 +14,15 @@ router = APIRouter(prefix="/api/saves", tags=["saves"])
 
 # Pydantic Models
 
+
 class SaveRequest(BaseModel):
     title: str | None = None
     kind: str | None = None  # 'system','user','prompt','state'
     provider: str | None = None
     model: str | None = None
-    data: dict | None = None  # arbitrary: system_prompt, user_prompt, response, parameters, notes
+    data: dict | None = (
+        None  # arbitrary: system_prompt, user_prompt, response, parameters, notes
+    )
 
 
 class SaveResponse(BaseModel):
@@ -42,8 +45,11 @@ class SaveItem(BaseModel):
 
 # Endpoints
 
+
 @router.post("", response_model=SaveResponse)
-async def create_save(payload: SaveRequest, session: AsyncSession | None = Depends(try_get_session)):
+async def create_save(
+    payload: SaveRequest, session: AsyncSession | None = Depends(try_get_session)
+):
     if session is None:
         raise HTTPException(status_code=400, detail="DATABASE_URL not configured")
     sid = str(uuid.uuid4())
@@ -74,7 +80,11 @@ async def create_save(payload: SaveRequest, session: AsyncSession | None = Depen
 async def list_saves(session: AsyncSession | None = Depends(try_get_session)):
     if session is None:
         raise HTTPException(status_code=400, detail="DATABASE_URL not configured")
-    rows = (await session.execute(select(Snapshot).order_by(Snapshot.created_at.desc()))).scalars().all()
+    rows = (
+        (await session.execute(select(Snapshot).order_by(Snapshot.created_at.desc())))
+        .scalars()
+        .all()
+    )
     out: list[SaveItem] = []
     for r in rows:
         out.append(
@@ -94,7 +104,9 @@ async def list_saves(session: AsyncSession | None = Depends(try_get_session)):
 async def get_save(sid: str, session: AsyncSession | None = Depends(try_get_session)):
     if session is None:
         raise HTTPException(status_code=400, detail="DATABASE_URL not configured")
-    row = (await session.execute(select(Snapshot).where(Snapshot.id == sid))).scalar_one_or_none()
+    row = (
+        await session.execute(select(Snapshot).where(Snapshot.id == sid))
+    ).scalar_one_or_none()
     if not row:
         raise HTTPException(status_code=404, detail="Not found")
     return {
