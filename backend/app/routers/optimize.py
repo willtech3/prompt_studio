@@ -2,15 +2,13 @@
 
 import os
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from config.db import get_session
 from config.optimization_prompts import META_PROMPT, PROVIDER_HINTS
 from services.openrouter import OpenRouterService
 
-router = APIRouter(prefix="/api", tags=["optimize"])
+router = APIRouter(prefix="/api/optimize", tags=["optimize"])
 
 
 class OptimizeRequest(BaseModel):
@@ -27,10 +25,8 @@ class OptimizeResponse(BaseModel):
     notes: list[str] = []
 
 
-@router.post("/optimize", response_model=OptimizeResponse)
-async def optimize_prompt(
-    req: OptimizeRequest, _session: AsyncSession = Depends(get_session)
-):
+@router.post("", response_model=OptimizeResponse)
+async def optimize_prompt(req: OptimizeRequest):
     """Optimize a prompt using OpenAI's meta-prompt and provider-specific hints."""
     if not os.getenv("OPENROUTER_API_KEY"):
         raise HTTPException(status_code=400, detail="OPENROUTER_API_KEY not set")
