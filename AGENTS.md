@@ -162,6 +162,7 @@ All commands use `uv run` internally, so you never need to manually activate the
 1. **USE JUSTFILE COMMANDS** - Always use commands from `backend/justfile` for Python/API development tasks (start, stop, test, lint, format, etc.) instead of running commands directly
 2. **USE UV RUN** - If justfile doesn't have a command you need, use `uv run` instead of activating venv manually (e.g., `uv run uvicorn`, `uv run pytest`)
 3. **NEVER use `git commit .`** - Always add files individually with `git add <specific-file>` to avoid committing unintended files
+4. **ALWAYS USE FEATURE BRANCHES** - Never commit directly to main. Always create a new feature branch (e.g., `git checkout -b feature/description`) before making changes, then merge via pull request.
 
 ## Technical Notes
 - Use async/await for consistency (not for premature optimization)
