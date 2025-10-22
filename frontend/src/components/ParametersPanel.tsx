@@ -71,6 +71,18 @@ export function ParametersPanel() {
   const toolSchemas = usePromptStore((s) => s.toolSchemas)
   const setToolSchemas = usePromptStore((s) => s.setToolSchemas)
   const supported = usePromptStore((s) => s.supportedParameters)
+
+  // Derive enabled tool names from JSON schema (robust to malformed JSON)
+  const enabledTools = useMemo(() => {
+    try {
+      const arr = JSON.parse(toolSchemas || '[]') as any[]
+      return Array.isArray(arr)
+        ? arr.map((t: any) => t?.function?.name).filter(Boolean)
+        : []
+    } catch {
+      return [] as string[]
+    }
+  }, [toolSchemas])
   
   // Handle tool selection
   const handleToolToggle = (toolName: string, enabled: boolean) => {
@@ -387,7 +399,7 @@ export function ParametersPanel() {
                 <input
                   type="checkbox"
                   className="mt-0.5 accent-blue-600"
-                  checked={toolSchemas.includes('search_web')}
+                  checked={enabledTools.includes('search_web')}
                   onChange={(e) => handleToolToggle('search_web', e.target.checked)}
                 />
                 <div className="flex-1">
@@ -399,7 +411,7 @@ export function ParametersPanel() {
                 <input
                   type="checkbox"
                   className="mt-0.5 accent-blue-600"
-                  checked={toolSchemas.includes('get_current_time')}
+                  checked={enabledTools.includes('get_current_time')}
                   onChange={(e) => handleToolToggle('get_current_time', e.target.checked)}
                 />
                 <div className="flex-1">
@@ -411,7 +423,7 @@ export function ParametersPanel() {
                 <input
                   type="checkbox"
                   className="mt-0.5 accent-blue-600"
-                  checked={toolSchemas.includes('calculate')}
+                  checked={enabledTools.includes('calculate')}
                   onChange={(e) => handleToolToggle('calculate', e.target.checked)}
                 />
                 <div className="flex-1">
