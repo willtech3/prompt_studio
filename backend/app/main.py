@@ -77,6 +77,13 @@ app.include_router(saves_routes.router)
 app.include_router(optimize_routes.router)
 
 
+def _provider_id_from_model(model_id: str | None) -> str:
+    try:
+        return (model_id or "").split("/")[0].split(":")[0].replace("-", "")
+    except Exception:
+        return ""
+
+
 @app.get("/health")
 async def health():
     # also report DB availability
@@ -295,7 +302,7 @@ async def stream_chat(
             rf_text = str(response_format).strip()
             # Some providers (e.g., xai/grok-4) currently reject response_format.
             # Keep simple: avoid setting it for xai:* models to prevent 400s.
-            provider_prefix = (model or "").split("/")[0].split(":")[0].replace("-", "")
+            provider_prefix = _provider_id_from_model(model)
             allow_response_format = provider_prefix not in {"xai"}
             if allow_response_format:
                 try:
@@ -382,7 +389,7 @@ async def stream_chat(
                     # to the function object. This keeps behavior minimal and scoped to iteration 1.
                     # Skip for xAI: known OpenRouter/xAI compatibility issues with forced tool_choice
                     # (see GitHub issues #34185, #36994 in zed-industries/zed)
-                    provider_prefix = (model or "").split("/")[0].split(":")[0].replace("-", "")
+                    provider_prefix = _provider_id_from_model(model)
                     skip_forced_tool_choice = provider_prefix in {"xai"}
 
                     if (
@@ -854,59 +861,60 @@ async def optimize_prompt(req: OptimizeRequest, session: AsyncSession = Depends(
 
     # Call the same model to optimize for itself (e.g., Claude optimizes for Claude)
     svc = OpenRouterService()
-    payload = await svc.completion(
-        model=req.model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_msg},
-        ],
-        temperature=0.5,  # Slightly higher for creative optimization suggestions
-    )
-
-    optimized_prompt = (
-        payload.get("choices", [{}])[0]
-        .get("message", {})
-        .get("content", "")
-        .strip()
-    )
-
-    if not optimized_prompt:
-        return OptimizeResponse(
-            optimized=req.prompt,
-            notes=["Optimization failed: empty response from model"],
-            changes=[]
+    try:
+        payload = await svc.completion(
+            model=req.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_msg},
+            ],
+            temperature=0.5,  # Slightly higher for creative optimization suggestions
         )
 
-    # Extract changes and notes from comparison
-    changes = []
-    notes = []
+        optimized_prompt = (
+            payload.get("choices", [{}])[0]
+            .get("message", {})
+            .get("content", "")
+            .strip()
+        )
 
-    # Simple heuristic: if the optimized prompt is significantly different, note it
-    if len(optimized_prompt) > len(req.prompt) * 1.2:
-        changes.append("Expanded prompt with additional structure and clarity")
-    elif len(optimized_prompt) < len(req.prompt) * 0.8:
-        changes.append("Condensed prompt for clarity")
-    else:
-        changes.append("Refined prompt structure and wording")
+        if not optimized_prompt:
+            return OptimizeResponse(
+                optimized=req.prompt,
+                notes=["Optimization failed: empty response from model"],
+                changes=[]
+            )
 
-    # Check for provider-specific patterns
-    if provider_id == "anthropic" and ("<" in optimized_prompt and ">" in optimized_prompt):
-        notes.append("Added XML-style tags for better structure")
-    elif provider_id == "openai" and ("```" in optimized_prompt or "<<<" in optimized_prompt):
-        notes.append("Added delimiters for clear input/output separation")
-    elif provider_id == "deepseek" and "<think>" in optimized_prompt.lower():
-        notes.append("Added thinking blocks for reasoning tasks")
+        # Extract changes and notes from comparison
+        changes = []
+        notes = []
 
-    if "# " in optimized_prompt or "## " in optimized_prompt:
-        notes.append("Added section headers for organization")
+        # Simple heuristic: if the optimized prompt is significantly different, note it
+        if len(optimized_prompt) > len(req.prompt) * 1.2:
+            changes.append("Expanded prompt with additional structure and clarity")
+        elif len(optimized_prompt) < len(req.prompt) * 0.8:
+            changes.append("Condensed prompt for clarity")
+        else:
+            changes.append("Refined prompt structure and wording")
 
-    await svc.close()
+        # Check for provider-specific patterns
+        if provider_id == "anthropic" and ("<" in optimized_prompt and ">" in optimized_prompt):
+            notes.append("Added XML-style tags for better structure")
+        elif provider_id == "openai" and ("```" in optimized_prompt or "<<<" in optimized_prompt):
+            notes.append("Added delimiters for clear input/output separation")
+        elif provider_id == "deepseek" and "<think>" in optimized_prompt.lower():
+            notes.append("Added thinking blocks for reasoning tasks")
 
-    return OptimizeResponse(
-        optimized=optimized_prompt,
-        changes=changes,
-        notes=notes
-    )
+        if "# " in optimized_prompt or "## " in optimized_prompt:
+            notes.append("Added section headers for organization")
+
+        return OptimizeResponse(
+            optimized=optimized_prompt,
+            changes=changes,
+            notes=notes
+        )
+    finally:
+        await svc.close()
 
 
 # ---- Snapshot Save/Retrieve ----
