@@ -1,11 +1,11 @@
-from fastapi import APIRouter, HTTPException, Query, Depends
-from typing import Optional
-from sqlalchemy.ext.asyncio import AsyncSession
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from config.db import get_session
-from models.provider_content import ProviderContent
 from models.model_config import ModelConfig
+from models.provider_content import ProviderContent
 
 router = APIRouter(prefix="/api/providers", tags=["providers"])
 
@@ -72,7 +72,7 @@ async def get_provider_guide(provider_id: str, session: AsyncSession = Depends(g
 @router.get("/{provider_id}/prompting-guides")
 async def get_provider_prompting_guides(
     provider_id: str,
-    model_id: Optional[str] = Query(None, description="Optional model ID for model-specific guidance"),
+    model_id: str | None = Query(None, description="Optional model ID for model-specific guidance"),
     session: AsyncSession = Depends(get_session)
 ):
     """Return prompting guides for a provider, optionally filtered by model."""
