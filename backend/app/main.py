@@ -21,6 +21,13 @@ from models.provider_content import ProviderContent
 import uuid
 from sqlalchemy import select
 import datetime as dt
+from .routers import (
+    chat as chat_routes,
+    models as model_routes,
+    providers as provider_routes,
+    saves as saves_routes,
+    optimize as optimize_routes,
+)
 
 
 def get_cors_origins() -> list[str]:
@@ -61,6 +68,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Register placeholder routers (no behavior changes)
+app.include_router(chat_routes.router)
+app.include_router(model_routes.router)
+app.include_router(provider_routes.router)
+app.include_router(saves_routes.router)
+app.include_router(optimize_routes.router)
+
+
+def _provider_id_from_model(model_id: str | None) -> str:
+    try:
+        return (model_id or "").split("/")[0].split(":")[0].replace("-", "")
+    except Exception:
+        return ""
 
 
 @app.get("/health")
@@ -279,14 +300,19 @@ async def stream_chat(
             # Normalize response_format for Chat Completions
             # Accept either keywords (e.g., "json", "json_object") or a JSON object string
             rf_text = str(response_format).strip()
-            try:
-                rf_obj = json.loads(rf_text)
-                if isinstance(rf_obj, dict):
-                    params["response_format"] = rf_obj
-            except Exception:
-                rf_lower = rf_text.lower()
-                if rf_lower in ("json", "json_object", "jsonobject"):
-                    params["response_format"] = {"type": "json_object"}
+            # Some providers (e.g., xai/grok-4) currently reject response_format.
+            # Keep simple: avoid setting it for xai:* models to prevent 400s.
+            provider_prefix = _provider_id_from_model(model)
+            allow_response_format = provider_prefix not in {"xai"}
+            if allow_response_format:
+                try:
+                    rf_obj = json.loads(rf_text)
+                    if isinstance(rf_obj, dict):
+                        params["response_format"] = rf_obj
+                except Exception:
+                    rf_lower = rf_text.lower()
+                    if rf_lower in ("json", "json_object", "jsonobject"):
+                        params["response_format"] = {"type": "json_object"}
         if stop:
             # Accept either comma or newline separated values
             seps = [",", "\n"]
@@ -361,11 +387,17 @@ async def stream_chat(
                     # If the prompt clearly implies fresh/current data and search_web is available,
                     # nudge the first iteration to call search_web explicitly by setting tool_choice
                     # to the function object. This keeps behavior minimal and scoped to iteration 1.
+                    # Skip for xAI: known OpenRouter/xAI compatibility issues with forced tool_choice
+                    # (see GitHub issues #34185, #36994 in zed-industries/zed)
+                    provider_prefix = _provider_id_from_model(model)
+                    skip_forced_tool_choice = provider_prefix in {"xai"}
+
                     if (
                         iteration == 1
                         and implies_needs_tools
                         and "search_web" in tool_names
                         and call_params.get("tool_choice") == "auto"
+                        and not skip_forced_tool_choice
                     ):
                         call_params["tool_choice"] = {
                             "type": "function",
@@ -429,7 +461,7 @@ async def stream_chat(
                                 func_args = {}
 
                             # If search is used and the prompt asks for a timeframe, add a dynamic, non-hardcoded hint
-                            if func_name == 'search_web' and ('get_current_time' in tool_names or True):
+                            if func_name == 'search_web':
                                 try:
                                     hint = parse_time_constraints(f"{system or ''} \n {prompt}")
                                     # Do not override model-provided constraints
@@ -829,57 +861,60 @@ async def optimize_prompt(req: OptimizeRequest, session: AsyncSession = Depends(
 
     # Call the same model to optimize for itself (e.g., Claude optimizes for Claude)
     svc = OpenRouterService()
-    payload = await svc.completion(
-        model=req.model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_msg},
-        ],
-        temperature=0.5,  # Slightly higher for creative optimization suggestions
-    )
-
-    optimized_prompt = (
-        payload.get("choices", [{}])[0]
-        .get("message", {})
-        .get("content", "")
-        .strip()
-    )
-
-    if not optimized_prompt:
-        return OptimizeResponse(
-            optimized=req.prompt,
-            notes=["Optimization failed: empty response from model"],
-            changes=[]
+    try:
+        payload = await svc.completion(
+            model=req.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_msg},
+            ],
+            temperature=0.5,  # Slightly higher for creative optimization suggestions
         )
 
-    # Extract changes and notes from comparison
-    changes = []
-    notes = []
+        optimized_prompt = (
+            payload.get("choices", [{}])[0]
+            .get("message", {})
+            .get("content", "")
+            .strip()
+        )
 
-    # Simple heuristic: if the optimized prompt is significantly different, note it
-    if len(optimized_prompt) > len(req.prompt) * 1.2:
-        changes.append("Expanded prompt with additional structure and clarity")
-    elif len(optimized_prompt) < len(req.prompt) * 0.8:
-        changes.append("Condensed prompt for clarity")
-    else:
-        changes.append("Refined prompt structure and wording")
+        if not optimized_prompt:
+            return OptimizeResponse(
+                optimized=req.prompt,
+                notes=["Optimization failed: empty response from model"],
+                changes=[]
+            )
 
-    # Check for provider-specific patterns
-    if provider_id == "anthropic" and ("<" in optimized_prompt and ">" in optimized_prompt):
-        notes.append("Added XML-style tags for better structure")
-    elif provider_id == "openai" and ("```" in optimized_prompt or "<<<" in optimized_prompt):
-        notes.append("Added delimiters for clear input/output separation")
-    elif provider_id == "deepseek" and "<think>" in optimized_prompt.lower():
-        notes.append("Added thinking blocks for reasoning tasks")
+        # Extract changes and notes from comparison
+        changes = []
+        notes = []
 
-    if "# " in optimized_prompt or "## " in optimized_prompt:
-        notes.append("Added section headers for organization")
+        # Simple heuristic: if the optimized prompt is significantly different, note it
+        if len(optimized_prompt) > len(req.prompt) * 1.2:
+            changes.append("Expanded prompt with additional structure and clarity")
+        elif len(optimized_prompt) < len(req.prompt) * 0.8:
+            changes.append("Condensed prompt for clarity")
+        else:
+            changes.append("Refined prompt structure and wording")
 
-    return OptimizeResponse(
-        optimized=optimized_prompt,
-        changes=changes,
-        notes=notes
-    )
+        # Check for provider-specific patterns
+        if provider_id == "anthropic" and ("<" in optimized_prompt and ">" in optimized_prompt):
+            notes.append("Added XML-style tags for better structure")
+        elif provider_id == "openai" and ("```" in optimized_prompt or "<<<" in optimized_prompt):
+            notes.append("Added delimiters for clear input/output separation")
+        elif provider_id == "deepseek" and "<think>" in optimized_prompt.lower():
+            notes.append("Added thinking blocks for reasoning tasks")
+
+        if "# " in optimized_prompt or "## " in optimized_prompt:
+            notes.append("Added section headers for organization")
+
+        return OptimizeResponse(
+            optimized=optimized_prompt,
+            changes=changes,
+            notes=notes
+        )
+    finally:
+        await svc.close()
 
 
 # ---- Snapshot Save/Retrieve ----

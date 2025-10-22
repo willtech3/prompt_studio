@@ -174,3 +174,10 @@ All commands use `uv run` internally, so you never need to manually activate the
 
 ## Remember
 This is a tool to help people write better prompts. Every feature should serve that goal. Start with the simplest version that provides value, then iterate based on usage and feedback.
+
+## Coding Rules (MVP)
+
+1. We avoid try/except blocks unless they are absolutely needed. We don't need to code overly defensively.
+2. Retries and robustness are not currently a priority. We'll fix bugs as we encounter them and rely on assumptions for the sake of simplicity for now.
+3. Code that is easy to read is easy to reason about.
+4. Code must be correct or it doesn't work. Always check docs before updating API calls or making assumptions about how something works.
