@@ -1,12 +1,18 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
-import { useRef, useState } from 'react'
+import React, { useRef, useState } from 'react'
 import { Copy, Save as SaveIcon, Settings2, Sparkles, Square } from 'lucide-react'
 import { usePromptStore } from '../store/promptStore'
 import { api } from '../services/api'
 import { useToastStore } from '../store/toastStore'
 import { useUIStore } from '../store/uiStore'
+import { RunTrace, ToolExecutionTrace, ReasoningBlock as ReasoningBlockType } from '../types/models'
+import ToolChips from './ToolChips'
+import RunInspectorDrawer from './RunInspectorDrawer'
+import ResponseFootnotes from './ResponseFootnotes'
+import SearchResultsInline from './SearchResultsInline'
+import ReasoningBlock from './ReasoningBlock'
 import 'highlight.js/styles/github-dark.css' // Dark theme only
 
 export function ResponsePanel() {
@@ -21,15 +27,55 @@ export function ResponsePanel() {
   const variables = usePromptStore((s) => s.variables)
   const parameters = usePromptStore((s) => s.parameters)
   const reasoningEffort = usePromptStore((s) => s.reasoningEffort)
+  const toolSchemas = usePromptStore((s) => s.toolSchemas)
   const model = usePromptStore((s) => s.model)
   const settingsOpen = useUIStore((s) => s.settingsOpen)
   const toggleSettings = useUIStore((s) => s.toggleSettings)
+  const resetTick = usePromptStore((s) => s.resetTick)
   
   const currentStream = useRef<EventSource | null>(null)
+  const [runTrace, setRunTrace] = useState<RunTrace | null>(null)
+  const [inspectorOpen, setInspectorOpen] = useState(false)
+  const [focusToolId, setFocusToolId] = useState<string | undefined>()
+
+  const nowIso = () => new Date().toISOString()
+  const parseArgs = (args: string): Record<string, unknown> | null => {
+    try { return JSON.parse(args) } catch { return { _raw: args } as any }
+  }
+  const extractLinks = (result: any) => {
+    try {
+      const out: Array<{ title: string; url: string; source?: string; snippet?: string }> = []
+      // Common shape: { success, result: { results: [{ title, url, source, snippet }] } }
+      const items = result?.result?.results || result?.results || []
+      if (Array.isArray(items)) {
+        for (const it of items) {
+          if (it && typeof it.url === 'string') {
+            out.push({ title: it.title || it.url, url: it.url, source: it.source, snippet: it.snippet })
+          }
+        }
+      }
+      if (out.length) return out
+      // Fallback: a direct url field
+      if (typeof result?.url === 'string') return [{ title: result.title || result.url, url: result.url }]
+      return []
+    } catch { return [] }
+  }
+
+  // Clear tool traces when user presses Clear
+  // resetTick increments in store.reset()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  React.useEffect(() => { setRunTrace(null); setInspectorOpen(false); setFocusToolId(undefined) }, [resetTick])
 
   const onGenerate = () => {
     if (isStreaming) return
     setResponse('')
+    setRunTrace({
+      runId: `run-${Date.now()}`,
+      model,
+      startedAt: nowIso(),
+      tools: [],
+      reasoning: [],
+    })
     addHistoryEntry()
     setIsStreaming(true)
 
@@ -62,18 +108,104 @@ export function ResponsePanel() {
       responseFormat: parameters.responseFormat,
       stop: parameters.stop,
       reasoningEffort: reasoningEffort,
+      tools: toolSchemas || null,
+      toolChoice: toolSchemas ? 'auto' : null,
     })
     currentStream.current = es
     es.addEventListener('message', (e) => {
       try {
         const parsed = JSON.parse(e.data)
-        if (parsed.done) {
+        
+        // Handle different message types
+        if (parsed.type === 'reasoning') {
+          // Model provided reasoning/thinking content
+          const reasoningBlock: ReasoningBlockType = {
+            id: `reasoning-${Date.now()}`,
+            content: parsed.content,
+            timestamp: nowIso(),
+          }
+          setRunTrace((prev) => prev ? { ...prev, reasoning: [...prev.reasoning, reasoningBlock] } : prev)
+        }
+        else if (parsed.type === 'tool_calls') {
+          // Model wants to call tools
+          const executions: ToolExecutionTrace[] = (parsed.calls || []).map((call: any) => ({
+            id: call.id || `${call.name}-${Date.now()}`,
+            name: call.name,
+            displayName: call.name?.replace(/_/g, ' '),
+            status: 'queued' as const,
+            parameters: typeof call.arguments === 'string' ? parseArgs(call.arguments) : call.arguments,
+            error: null,
+          }))
+          setRunTrace((prev) => prev ? { ...prev, tools: [...prev.tools, ...executions] } : prev)
+        }
+        else if (parsed.type === 'tool_executing') {
+          // Tool is being executed
+          setRunTrace((prev) => {
+            if (!prev) return prev
+            const tools = prev.tools.map((t) => {
+              // Match by ID first (if available), fallback to name for backward compatibility
+              const matchesId = parsed.id && t.id === parsed.id
+              const matchesName = !parsed.id && t.name === parsed.name && (t.status === 'queued' || t.status === 'running')
+              if (matchesId || matchesName) {
+                return { ...t, status: 'running' as const, startedAt: t.startedAt || nowIso() }
+              }
+              return t
+            })
+            return { ...prev, tools }
+          })
+        }
+        else if (parsed.type === 'tool_result') {
+          const succeeded = parsed.result?.success !== false
+          setRunTrace((prev) => {
+            if (!prev) return prev
+            const tools = prev.tools.map((t) => {
+              // Match by ID first (if available), fallback to name for backward compatibility
+              const matchesId = parsed.id && t.id === parsed.id
+              const matchesName = !parsed.id && t.name === parsed.name && (t.status === 'running' || t.status === 'queued')
+              if (matchesId || matchesName) {
+                const endedAt = nowIso()
+                const durationMs = t.startedAt ? (new Date(endedAt).getTime() - new Date(t.startedAt).getTime()) : undefined
+                const newStatus: ToolExecutionTrace['status'] = succeeded ? 'completed' : 'failed'
+                return {
+                  ...t,
+                  status: newStatus,
+                  endedAt,
+                  durationMs,
+                  outputRaw: parsed.result,
+                  links: extractLinks(parsed.result),
+                  outputSummary: Array.isArray(parsed.result?.result?.results) ? `${parsed.result.result.results.length} results` : undefined,
+                  error: succeeded ? null : { message: parsed.result?.error || 'Tool failed' },
+                }
+              }
+              return t
+            })
+            return { ...prev, tools }
+          })
+        }
+        else if (parsed.type === 'content') {
+          // Regular content
+          appendResponse(parsed.content)
+        }
+        else if (parsed.type === 'done' || parsed.done) {
+          // Stream complete
+          setIsStreaming(false)
+          setRunTrace((prev) => prev ? { ...prev, endedAt: nowIso() } : prev)
+          if (currentStream.current) {
+            api.stopStream(currentStream.current)
+            currentStream.current = null
+          }
+        }
+        else if (parsed.type === 'error') {
+          // Error occurred
+          appendResponse(`\n\n**Error:** ${parsed.error}`)
           setIsStreaming(false)
           if (currentStream.current) {
             api.stopStream(currentStream.current)
             currentStream.current = null
           }
-        } else if (parsed.content) {
+        }
+        else if (parsed.content) {
+          // Legacy format (backward compatibility)
           appendResponse(parsed.content)
         }
       } catch (err) {
@@ -153,6 +285,22 @@ export function ResponsePanel() {
         </div>
       </div>
       <div className="px-4 py-3 overflow-hidden">
+        {/* Tool Chips summary */}
+        {runTrace?.tools?.length ? (
+          <div className="mb-3 flex justify-end">
+            <ToolChips run={runTrace} onOpen={(id) => { setInspectorOpen(true); setFocusToolId(id) }} />
+          </div>
+        ) : null}
+
+        {/* Reasoning blocks (shown before search results) */}
+        {runTrace?.reasoning?.map((block, idx) => (
+          <ReasoningBlock key={block.id} content={block.content} index={idx} />
+        ))}
+
+        {/* Search results preview (T3-style) */}
+        <SearchResultsInline run={runTrace} />
+
+        {/* Response Content */}
         <div className="prose prose-sm dark:prose-invert max-w-none break-words" aria-live="polite">
           {response ? (
             <ReactMarkdown 
@@ -165,7 +313,9 @@ export function ResponsePanel() {
             <p className="text-gray-500">No response yet. Press Generate to create.</p>
           )}
         </div>
+        <ResponseFootnotes run={runTrace} />
       </div>
+      <RunInspectorDrawer open={inspectorOpen} onClose={() => setInspectorOpen(false)} run={runTrace} focusToolId={focusToolId} onFocusTool={(id) => setFocusToolId(id)} />
     </section>
   )
 }

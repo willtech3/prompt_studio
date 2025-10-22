@@ -46,6 +46,7 @@ export interface PromptState {
   variables: { name: string; value: string }[]
   parameters: ModelParameters
   reasoningEffort: 'auto' | 'low' | 'medium' | 'high'
+  toolSchemas: string
   response: string
   isStreaming: boolean
   history: HistoryItem[]
@@ -57,6 +58,7 @@ export interface PromptState {
   originalUserPrompt?: string
   presetExplainer?: string | null
   showPresetExplainer: boolean
+  resetTick: number
 }
 
 interface PromptActions {
@@ -88,6 +90,7 @@ interface PromptActions {
   appendResponse: (chunk: string) => void
   setIsStreaming: (v: boolean) => void
   setReasoningEffort: (v: 'auto' | 'low' | 'medium' | 'high') => void
+  setToolSchemas: (v: string) => void
   setModelInfo: (info: any | undefined) => void
   setSupportedParameters: (params: string[]) => void
   setSystemOptInfo: (info: OptimizationInfo | undefined) => void
@@ -137,6 +140,7 @@ export const usePromptStore = create<PromptState & PromptActions>((set) => ({
     logitBiasJson: null,
   },
   reasoningEffort: 'auto',
+  toolSchemas: '',
   response: '',
   isStreaming: false,
   history: [],
@@ -148,6 +152,7 @@ export const usePromptStore = create<PromptState & PromptActions>((set) => ({
   originalUserPrompt: undefined,
   presetExplainer: null,
   showPresetExplainer: true,
+  resetTick: 0,
   setProvider: (p) => set({ provider: p }),
   setModel: (m) => set({ model: m }),
   setSystemPrompt: (v) => set((s) => {
@@ -190,6 +195,7 @@ export const usePromptStore = create<PromptState & PromptActions>((set) => ({
   appendResponse: (chunk) => set((s) => ({ response: s.response + chunk })),
   setIsStreaming: (v) => set({ isStreaming: v }),
   setReasoningEffort: (v) => set({ reasoningEffort: v }),
+  setToolSchemas: (v) => set({ toolSchemas: v }),
   setModelInfo: (info) => set((s) => {
     // Auto-set maxTokens to model's max_completion_tokens if not already set
     const maxTokens = info?.max_completion_tokens || null
@@ -264,5 +270,5 @@ export const usePromptStore = create<PromptState & PromptActions>((set) => ({
     }
   }),
   clearHistory: () => set({ history: [] }),
-  reset: () => set({ systemPrompt: '', userPrompt: '', response: '' }),
+  reset: () => set((s) => ({ systemPrompt: '', userPrompt: '', response: '', resetTick: s.resetTick + 1 })),
 }))

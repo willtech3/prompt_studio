@@ -20,3 +20,46 @@ export interface OpenRouterModel {
 }
 
 
+// Tool executions and run trace (for Run Inspector UI)
+export type ToolStatus = 'queued' | 'running' | 'completed' | 'failed'
+
+export interface ToolLink {
+  title: string
+  url: string
+  source?: string
+  snippet?: string
+  faviconUrl?: string
+}
+
+export interface ToolExecutionTrace {
+  id: string
+  name: string
+  displayName?: string
+  status: ToolStatus
+  startedAt?: string
+  endedAt?: string
+  durationMs?: number
+  parameters?: Record<string, unknown> | null
+  outputSummary?: string
+  links?: ToolLink[]
+  outputRaw?: unknown
+  error?: { message: string; code?: string } | null
+}
+
+export interface ReasoningBlock {
+  id: string
+  content: string
+  timestamp: string
+}
+
+export interface RunTrace {
+  runId: string
+  model: string
+  startedAt: string
+  endedAt?: string
+  totalDurationMs?: number
+  tokens?: { input?: number; output?: number; total?: number; costUsd?: number }
+  tools: ToolExecutionTrace[]
+  reasoning: ReasoningBlock[]
+}
+

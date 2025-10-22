@@ -3,6 +3,7 @@ import { usePromptStore } from '../store/promptStore'
 import { api } from '../services/api'
 import { Wand2, Plus, Copy, Braces, PanelLeft, Undo2 } from 'lucide-react'
 import { useToastStore } from '../store/toastStore'
+import ToolSelector from './ToolSelector'
 import { estimateTokensApproximate } from '../utils/tokenEstimator'
 import { useAutoGrow } from '../hooks/useAutoGrow'
 import { useUIStore } from '../store/uiStore'
@@ -181,6 +182,7 @@ export function PromptEditor() {
         placeholder="Write a short summary about..."
       />
       <UserOptimizationNotes />
+      <ToolSelector />
 
       {/* Variables editor */}
       <div className="mt-4">
