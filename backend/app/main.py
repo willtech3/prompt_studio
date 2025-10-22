@@ -1,30 +1,40 @@
-from fastapi import FastAPI, Query, HTTPException, Depends
+import contextlib
+import datetime as dt
+import json
+import os
+import re
+import uuid
+from pathlib import Path
+
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-import os
-from typing import Optional
-import re
-
-from services.openrouter import OpenRouterService
-from services.tool_executor import ToolExecutor
-from dotenv import load_dotenv
-from pathlib import Path
-import json
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config.db import create_all, get_session, init_engine, try_get_session
-from models.snapshot import Snapshot
 from models.model_config import ModelConfig
-import uuid
-from sqlalchemy import select
-import datetime as dt
+from models.snapshot import Snapshot
+from services.model_catalog import refresh_model_catalog
+from services.openrouter import OpenRouterService
+from services.tool_executor import ToolExecutor
+
 from .routers import (
     chat as chat_routes,
+)
+from .routers import (
     models as model_routes,
-    providers as provider_routes,
-    saves as saves_routes,
+)
+from .routers import (
     optimize as optimize_routes,
+)
+from .routers import (
+    providers as provider_routes,
+)
+from .routers import (
+    saves as saves_routes,
 )
 
 
@@ -71,11 +81,8 @@ app.add_middleware(
 @app.on_event("startup")
 async def _ensure_db_tables() -> None:
     """Create DB tables on startup (best-effort for dev)."""
-    try:
+    with contextlib.suppress(Exception):
         await create_all()
-    except Exception:
-        # Do not block app startup in dev if DB is unavailable
-        pass
 
 # Register placeholder routers (no behavior changes)
 app.include_router(chat_routes.router)
@@ -103,28 +110,28 @@ async def health():
 async def stream_chat(
     model: str = Query(..., description="Model ID to use"),
     prompt: str = Query("", description="User prompt content"),
-    system: Optional[str] = Query(None, description="Optional system prompt"),
-    temperature: Optional[float] = Query(0.7, ge=0, le=2, description="Sampling temperature"),
-    max_tokens: Optional[int] = Query(None, ge=1, description="Max tokens for completion"),
-    top_p: Optional[float] = Query(1.0, ge=0, le=1, description="Nucleus sampling"),
-    reasoning_effort: Optional[str] = Query(None, description="Reasoning effort: low|medium|high"),
+    system: str | None = Query(None, description="Optional system prompt"),
+    temperature: float | None = Query(0.7, ge=0, le=2, description="Sampling temperature"),
+    max_tokens: int | None = Query(None, ge=1, description="Max tokens for completion"),
+    top_p: float | None = Query(1.0, ge=0, le=1, description="Nucleus sampling"),
+    reasoning_effort: str | None = Query(None, description="Reasoning effort: low|medium|high"),
     # Tool calling parameters
-    tools: Optional[str] = Query(None, description="JSON-encoded array of tool schemas (OpenAI format)"),
-    tool_choice: Optional[str] = Query("auto", description="Tool choice: 'auto', 'required', 'none', or tool name"),
+    tools: str | None = Query(None, description="JSON-encoded array of tool schemas (OpenAI format)"),
+    tool_choice: str | None = Query("auto", description="Tool choice: 'auto', 'required', 'none', or tool name"),
     max_tool_calls: int = Query(5, ge=1, le=20, description="Maximum tool call iterations to prevent infinite loops"),
     # Additional tunable parameters (pass-through when provided)
-    top_k: Optional[int] = Query(None, description="Top-K sampling"),
-    frequency_penalty: Optional[float] = Query(None, description="Frequency penalty"),
-    presence_penalty: Optional[float] = Query(None, description="Presence penalty"),
-    repetition_penalty: Optional[float] = Query(None, description="Repetition penalty"),
-    min_p: Optional[float] = Query(None, description="Minimum probability threshold"),
-    top_a: Optional[float] = Query(None, description="Top-A sampling"),
-    seed: Optional[int] = Query(None, description="Deterministic seed"),
-    response_format: Optional[str] = Query(None, description="Response format, e.g. json or json_object"),
-    stop: Optional[str] = Query(None, description="Comma or newline-separated stop sequences"),
-    logprobs: Optional[bool] = Query(None, description="Return log probabilities of tokens"),
-    top_logprobs: Optional[int] = Query(None, description="How many top tokens to include in logprobs"),
-    logit_bias: Optional[str] = Query(None, description="JSON object mapping token IDs to bias values"),
+    top_k: int | None = Query(None, description="Top-K sampling"),
+    frequency_penalty: float | None = Query(None, description="Frequency penalty"),
+    presence_penalty: float | None = Query(None, description="Presence penalty"),
+    repetition_penalty: float | None = Query(None, description="Repetition penalty"),
+    min_p: float | None = Query(None, description="Minimum probability threshold"),
+    top_a: float | None = Query(None, description="Top-A sampling"),
+    seed: int | None = Query(None, description="Deterministic seed"),
+    response_format: str | None = Query(None, description="Response format, e.g. json or json_object"),
+    stop: str | None = Query(None, description="Comma or newline-separated stop sequences"),
+    logprobs: bool | None = Query(None, description="Return log probabilities of tokens"),
+    top_logprobs: int | None = Query(None, description="How many top tokens to include in logprobs"),
+    logit_bias: str | None = Query(None, description="JSON object mapping token IDs to bias values"),
     session: AsyncSession = Depends(get_session),
 ):
     def parse_time_constraints(text: str) -> dict | None:
@@ -223,7 +230,7 @@ async def stream_chat(
                 model_config = (await session.execute(
                     select(ModelConfig).where(ModelConfig.model_id == model)
                 )).scalar_one_or_none()
-                
+
                 if model_config and model_config.max_completion_tokens:
                     effective_max_tokens = model_config.max_completion_tokens
             except Exception:
@@ -263,7 +270,7 @@ async def stream_chat(
         # Initialize services
         svc = OpenRouterService()
         tool_executor = ToolExecutor() if tool_schemas else None
-        
+
         # Helper: extract plain text from provider-specific content blocks
         def _content_to_text(content) -> str:
             try:
@@ -273,10 +280,9 @@ async def stream_chat(
                 if isinstance(content, list):
                     parts = []
                     for block in content:
-                        if isinstance(block, dict):
-                            # Prefer text blocks for final answer
-                            if block.get("type") == "text" and isinstance(block.get("text"), str):
-                                parts.append(block.get("text", ""))
+                        # Prefer text blocks for final answer
+                        if isinstance(block, dict) and block.get("type") == "text" and isinstance(block.get("text"), str):
+                            parts.append(block.get("text", ""))
                     return "\n".join([p for p in parts if p])
             except Exception:
                 pass
@@ -342,11 +348,8 @@ async def stream_chat(
             # Ensure logprobs is enabled whenever top_logprobs is requested
             params["logprobs"] = True
         if logit_bias:
-            try:
+            with contextlib.suppress(Exception):
                 params["logit_bias"] = json.loads(logit_bias)
-            except Exception:
-                # Minimal: ignore malformed logit_bias
-                pass
 
         try:
             # Tool calling loop
@@ -358,7 +361,7 @@ async def stream_chat(
                 should_force_tools_first_turn = False  # Track if we tried to force tools
                 while iteration < limit:
                     iteration += 1
-                    
+
                     # Add tools to params for this iteration
                     call_params = params.copy()
                     call_params["tools"] = tool_schemas
@@ -412,26 +415,24 @@ async def stream_chat(
                             "function": {"name": "search_web"},
                         }
                         should_force_tools_first_turn = True
-                    
+
                     # Call model (non-streaming for tool use)
                     response = await svc.completion(
                         model=model,
                         messages=messages,
                         **call_params
                     )
-                    
+
                     message = response.get("choices", [{}])[0].get("message", {})
 
                     # Check for reasoning content (e.g., Claude's extended thinking)
                     # Some models return content blocks with thinking before tool calls
                     reasoning_content = None
-                    if content_blocks := message.get("content"):
-                        # If content is a list of blocks (Anthropic format)
-                        if isinstance(content_blocks, list):
-                            for block in content_blocks:
-                                if isinstance(block, dict) and block.get("type") == "thinking":
-                                    reasoning_content = block.get("thinking", "")
-                                    break
+                    if (content_blocks := message.get("content")) and isinstance(content_blocks, list):
+                        for block in content_blocks:
+                            if isinstance(block, dict) and block.get("type") == "thinking":
+                                reasoning_content = block.get("thinking", "")
+                                break
 
                     # Send reasoning to frontend if present
                     if reasoning_content:
@@ -447,12 +448,12 @@ async def stream_chat(
                                 "name": tc["function"]["name"],
                                 "arguments": tc["function"]["arguments"]
                             })
-                        
+
                         yield f"data: {json.dumps({'type': 'tool_calls', 'calls': tool_call_info})}\n\n"
-                        
+
                         # Add assistant message with tool calls to conversation history
                         messages.append(message)
-                        
+
                         # Execute each tool
                         for tool_call in tool_calls:
                             tool_call_id = tool_call.get("id", "unknown")
@@ -461,7 +462,7 @@ async def stream_chat(
 
                             # Notify that we're executing
                             yield f"data: {json.dumps({'type': 'tool_executing', 'id': tool_call_id, 'name': func_name})}\n\n"
-                            
+
                             # Parse arguments
                             try:
                                 func_args = json.loads(func_args_str)
@@ -481,7 +482,7 @@ async def stream_chat(
                                                     func_args[k] = v
                                 except Exception:
                                     pass
-                            
+
                             # Execute tool
                             result = await tool_executor.execute(func_name, func_args)
 
@@ -596,24 +597,24 @@ async def stream_chat(
                                 yield f"data: {json.dumps({'type': 'content', 'content': 'No additional content generated.'})}\n\n"
                                 sent_any_content = True
                                 break
-                
+
                 # If we hit max iterations
                 if iteration >= limit:
                     yield f"data: {json.dumps({'type': 'warning', 'message': f'Reached maximum tool call iterations ({limit})'})}\n\n"
                     if not sent_any_content:
                         yield f"data: {json.dumps({'type': 'content', 'content': 'Stopped after maximum tool calls. No further content generated by the model.'})}\n\n"
                         sent_any_content = True
-            
+
             else:
                 # Regular streaming without tools
                 async for chunk in svc.stream_completion(model=model, messages=messages, **params):
                     # Wrap chunk in JSON format expected by frontend
                     yield f"data: {json.dumps({'type': 'content', 'content': chunk})}\n\n"
                     sent_any_content = True
-            
+
             # Send done signal
             yield f"data: {json.dumps({'type': 'done', 'done': True})}\n\n"
-            
+
         except Exception as e:
             # Minimal error surfacing
             yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
@@ -621,9 +622,6 @@ async def stream_chat(
             await svc.close()
 
     return StreamingResponse(generate(), media_type="text/event-stream")
-
-
-## Model catalog endpoints moved to routers/models.py
 
 
 # ---- Prompt Optimization ----
@@ -678,33 +676,33 @@ The final prompt you output should adhere to the following structure below. Do n
 # Provider-specific optimization hints
 PROVIDER_HINTS = {
     "anthropic": """Claude models work best with XML-style tags like <instructions>, <context>, <thinking>, and <output>. Use explicit thinking blocks for complex reasoning tasks.
-    
+
     For tool calling: Claude Sonnet 4.5 supports parallel tool execution (up to 5 tools simultaneously). Use <thinking> blocks to reason about which tools to call and why. Example: '<thinking>I need current data, so I'll call search_web first, then analyze the results.</thinking>'""",
-    
+
     "openai": """GPT models benefit from clear delimiters (triple quotes, <<<>>>), step-by-step instructions, specific role definitions, and explicit output format specifications.
-    
+
     For tool calling: GPT-4+ supports parallel function calling (up to 10 tools). Be explicit about when to use tools: 'Use search_web for current information, then calculate for math.' Provide clear, detailed function descriptions in your tool schemas.""",
-    
+
     "deepseek": """DeepSeek-R1 models benefit from explicit <think> tags for reasoning tasks. Be explicit about showing work and breaking down complex queries into sequential prompts.
-    
+
     For tool calling: DeepSeek models work well with sequential tool calls. Use explicit reasoning: 'First, I'll search for X using search_web. Then, based on those results, I'll calculate Y.' Break complex multi-tool workflows into clear steps.""",
-    
+
     "google": """Gemini models work well with structured sections, explicit role definitions, and grounding passages. Specify token budgets and use numbered outputs.
-    
+
     For tool calling: Gemini supports function declarations. Use structured, numbered instructions: '1. Search for current data using search_web. 2. Extract key metrics. 3. Format results as JSON.' Be explicit about output format expectations.""",
-    
+
     "xai": """Grok models prefer explicit JSON schemas for structured output, clear role definitions, and tuning one parameter at a time.
-    
+
     For tool calling: Grok models benefit from clear tool usage instructions. Specify exact function names and expected parameters. Example: 'When asked about current events, call search_web with the query parameter. When asked for calculations, call calculate with the expression parameter.'"""
 }
 
 
 class OptimizeRequest(BaseModel):
     model: str
-    provider: Optional[str] = None
+    provider: str | None = None
     kind: str  # 'system' | 'user'
     prompt: str
-    system: Optional[str] = None
+    system: str | None = None
 
 
 class OptimizeResponse(BaseModel):
@@ -714,7 +712,7 @@ class OptimizeResponse(BaseModel):
 
 
 @app.post("/api/optimize", response_model=OptimizeResponse)
-async def optimize_prompt(req: OptimizeRequest, session: AsyncSession = Depends(get_session)):
+async def optimize_prompt(req: OptimizeRequest, _session: AsyncSession = Depends(get_session)):
     if not os.getenv("OPENROUTER_API_KEY"):
         raise HTTPException(status_code=400, detail="OPENROUTER_API_KEY not set")
 
@@ -735,7 +733,7 @@ async def optimize_prompt(req: OptimizeRequest, session: AsyncSession = Depends(
 
     # Add system context if optimizing a user prompt
     if req.system and req.kind == "user":
-        user_parts.append(f"System prompt context (for reference only, do not optimize this):")
+        user_parts.append("System prompt context (for reference only, do not optimize this):")
         user_parts.append(req.system)
         user_parts.append("")
 
