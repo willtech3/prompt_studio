@@ -14,7 +14,6 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config.db import create_all, get_session, init_engine, try_get_session
-from services.model_catalog import refresh_model_catalog
 from models.snapshot import Snapshot
 from models.model_config import ModelConfig
 from models.provider_content import ProviderContent
@@ -615,34 +614,7 @@ async def stream_chat(
     return StreamingResponse(generate(), media_type="text/event-stream")
 
 
-@app.get("/api/models")
-async def list_models(session: AsyncSession = Depends(get_session)):
-    """Return available models from database."""
-    await create_all()
-    rows = (await session.execute(select(ModelConfig).order_by(ModelConfig.provider, ModelConfig.model_id))).scalars().all()
-    return {"data": [r.raw or {"id": r.model_id, "name": r.model_name} for r in rows]}
-
-
-@app.get("/api/models/{model_path:path}/info")
-async def get_model_info(model_path: str, session: AsyncSession = Depends(get_session)):
-    """Return detailed model metadata for a given model ID."""
-    await create_all()
-    row = (await session.execute(select(ModelConfig).where(ModelConfig.model_id == model_path))).scalar_one_or_none()
-    if not row:
-        raise HTTPException(status_code=404, detail="Model not found")
-    return row.raw or {"id": row.model_id, "name": row.model_name}
-
-
-@app.post("/api/models/refresh")
-async def models_refresh(session: AsyncSession = Depends(get_session)):
-    if not os.getenv("OPENROUTER_API_KEY"):
-        raise HTTPException(status_code=400, detail="OPENROUTER_API_KEY not set")
-    try:
-        await create_all()
-        stats = await refresh_model_catalog(session)
-        return {"ok": True, **stats}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+## Model catalog endpoints moved to routers/models.py
 
 
 # ---- Provider Content ----
