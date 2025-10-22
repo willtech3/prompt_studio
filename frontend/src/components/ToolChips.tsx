@@ -1,5 +1,5 @@
 import { Fragment } from 'react'
-import { ExternalLink, Globe, Clock, Calculator, Wrench, AlertTriangle } from 'lucide-react'
+import { ExternalLink, Globe, Clock, Calculator, Wrench } from 'lucide-react'
 import type { RunTrace, ToolExecutionTrace } from '../types/models'
 
 interface Props {
@@ -69,5 +69,4 @@ export function ToolChips({ run, onOpen }: Props) {
 }
 
 export default ToolChips
-
 

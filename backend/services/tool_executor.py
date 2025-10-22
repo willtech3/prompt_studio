@@ -125,10 +125,14 @@ class ToolExecutor:
                 self.tools[tool_name](**arguments),
                 timeout=self.timeout
             )
-            return {
-                "success": True,
-                "result": result
-            }
+            # If tool returned a structured error payload, surface as failed for clearer UI state
+            if isinstance(result, dict) and result.get("error"):
+                return {
+                    "success": False,
+                    "error": str(result.get("error")),
+                    "result": result,
+                }
+            return {"success": True, "result": result}
         except asyncio.TimeoutError:
             return {
                 "success": False,
@@ -379,4 +383,3 @@ class ToolExecutor:
                 f"Unsupported expression type: {type(node).__name__}. "
                 "Only numbers and basic arithmetic (+, -, *, /, **) are allowed."
             )
-

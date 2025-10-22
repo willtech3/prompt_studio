@@ -357,6 +357,21 @@ async def stream_chat(
                             call_params["tool_choice"] = "auto"
                     else:
                         call_params["tool_choice"] = "auto" if tool_choice != "none" else "none"
+
+                    # If the prompt clearly implies fresh/current data and search_web is available,
+                    # nudge the first iteration to call search_web explicitly by setting tool_choice
+                    # to the function object. This keeps behavior minimal and scoped to iteration 1.
+                    if (
+                        iteration == 1
+                        and implies_needs_tools
+                        and "search_web" in tool_names
+                        and call_params.get("tool_choice") == "auto"
+                    ):
+                        call_params["tool_choice"] = {
+                            "type": "function",
+                            "function": {"name": "search_web"},
+                        }
+                        should_force_tools_first_turn = True
                     
                     # Call model (non-streaming for tool use)
                     response = await svc.completion(

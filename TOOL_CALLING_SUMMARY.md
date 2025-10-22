@@ -22,7 +22,7 @@ A complete, end-to-end tool calling system for testing prompts with tool executi
   - `search_web` - DuckDuckGo search API
   - `get_current_time` - UTC timestamp
   - `calculate` - Safe math evaluator (AST-based, no eval())
-- ✅ Timeout protection (5 seconds)
+- ✅ Timeout protection (7.5 seconds)
 - ✅ Structured error handling
 - ✅ OpenAI-compatible tool schemas
 
@@ -300,4 +300,3 @@ Search for the population of Tokyo, then calculate what 5% of that would be.
 **Ready for:** User testing and feedback
 
 🎉 **Tool calling is now live in the prompt studio!**
-
