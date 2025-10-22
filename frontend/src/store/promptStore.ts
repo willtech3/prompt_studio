@@ -58,6 +58,7 @@ export interface PromptState {
   originalUserPrompt?: string
   presetExplainer?: string | null
   showPresetExplainer: boolean
+  resetTick: number
 }
 
 interface PromptActions {
@@ -151,6 +152,7 @@ export const usePromptStore = create<PromptState & PromptActions>((set) => ({
   originalUserPrompt: undefined,
   presetExplainer: null,
   showPresetExplainer: true,
+  resetTick: 0,
   setProvider: (p) => set({ provider: p }),
   setModel: (m) => set({ model: m }),
   setSystemPrompt: (v) => set((s) => {
@@ -268,5 +270,5 @@ export const usePromptStore = create<PromptState & PromptActions>((set) => ({
     }
   }),
   clearHistory: () => set({ history: [] }),
-  reset: () => set({ systemPrompt: '', userPrompt: '', response: '' }),
+  reset: () => set((s) => ({ systemPrompt: '', userPrompt: '', response: '', resetTick: s.resetTick + 1 })),
 }))

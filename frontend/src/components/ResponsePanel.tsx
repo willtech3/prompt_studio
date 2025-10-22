@@ -1,21 +1,19 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
-import { useRef, useState } from 'react'
-import { Copy, Save as SaveIcon, Settings2, Sparkles, Square, Wrench, CheckCircle, Loader2, XCircle } from 'lucide-react'
+import React, { useRef, useState } from 'react'
+import { Copy, Save as SaveIcon, Settings2, Sparkles, Square } from 'lucide-react'
 import { usePromptStore } from '../store/promptStore'
 import { api } from '../services/api'
 import { useToastStore } from '../store/toastStore'
 import { useUIStore } from '../store/uiStore'
+import { RunTrace, ToolExecutionTrace, ReasoningBlock as ReasoningBlockType } from '../types/models'
+import ToolChips from './ToolChips'
+import RunInspectorDrawer from './RunInspectorDrawer'
+import ResponseFootnotes from './ResponseFootnotes'
+import SearchResultsInline from './SearchResultsInline'
+import ReasoningBlock from './ReasoningBlock'
 import 'highlight.js/styles/github-dark.css' // Dark theme only
-
-interface ToolExecution {
-  id: string
-  name: string
-  arguments: string
-  result?: any
-  status: 'pending' | 'executing' | 'completed' | 'error'
-}
 
 export function ResponsePanel() {
   const response = usePromptStore((s) => s.response)
@@ -33,14 +31,51 @@ export function ResponsePanel() {
   const model = usePromptStore((s) => s.model)
   const settingsOpen = useUIStore((s) => s.settingsOpen)
   const toggleSettings = useUIStore((s) => s.toggleSettings)
+  const resetTick = usePromptStore((s) => s.resetTick)
   
   const currentStream = useRef<EventSource | null>(null)
-  const [toolExecutions, setToolExecutions] = useState<ToolExecution[]>([])
+  const [runTrace, setRunTrace] = useState<RunTrace | null>(null)
+  const [inspectorOpen, setInspectorOpen] = useState(false)
+  const [focusToolId, setFocusToolId] = useState<string | undefined>()
+
+  const nowIso = () => new Date().toISOString()
+  const parseArgs = (args: string): Record<string, unknown> | null => {
+    try { return JSON.parse(args) } catch { return { _raw: args } as any }
+  }
+  const extractLinks = (result: any) => {
+    try {
+      const out: Array<{ title: string; url: string; source?: string; snippet?: string }> = []
+      // Common shape: { success, result: { results: [{ title, url, source, snippet }] } }
+      const items = result?.result?.results || result?.results || []
+      if (Array.isArray(items)) {
+        for (const it of items) {
+          if (it && typeof it.url === 'string') {
+            out.push({ title: it.title || it.url, url: it.url, source: it.source, snippet: it.snippet })
+          }
+        }
+      }
+      if (out.length) return out
+      // Fallback: a direct url field
+      if (typeof result?.url === 'string') return [{ title: result.title || result.url, url: result.url }]
+      return []
+    } catch { return [] }
+  }
+
+  // Clear tool traces when user presses Clear
+  // resetTick increments in store.reset()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  React.useEffect(() => { setRunTrace(null); setInspectorOpen(false); setFocusToolId(undefined) }, [resetTick])
 
   const onGenerate = () => {
     if (isStreaming) return
     setResponse('')
-    setToolExecutions([])
+    setRunTrace({
+      runId: `run-${Date.now()}`,
+      model,
+      startedAt: nowIso(),
+      tools: [],
+      reasoning: [],
+    })
     addHistoryEntry()
     setIsStreaming(true)
 
@@ -82,40 +117,71 @@ export function ResponsePanel() {
         const parsed = JSON.parse(e.data)
         
         // Handle different message types
-        if (parsed.type === 'tool_calls') {
+        if (parsed.type === 'reasoning') {
+          // Model provided reasoning/thinking content
+          const reasoningBlock: ReasoningBlockType = {
+            id: `reasoning-${Date.now()}`,
+            content: parsed.content,
+            timestamp: nowIso(),
+          }
+          setRunTrace((prev) => prev ? { ...prev, reasoning: [...prev.reasoning, reasoningBlock] } : prev)
+        }
+        else if (parsed.type === 'tool_calls') {
           // Model wants to call tools
-          const executions: ToolExecution[] = parsed.calls.map((call: any) => ({
-            id: call.id,
+          const executions: ToolExecutionTrace[] = (parsed.calls || []).map((call: any) => ({
+            id: call.id || `${call.name}-${Date.now()}`,
             name: call.name,
-            arguments: call.arguments,
-            status: 'pending' as const,
+            displayName: call.name?.replace(/_/g, ' '),
+            status: 'queued' as const,
+            parameters: typeof call.arguments === 'string' ? parseArgs(call.arguments) : call.arguments,
+            error: null,
           }))
-          setToolExecutions(executions)
-        } 
+          setRunTrace((prev) => prev ? { ...prev, tools: [...prev.tools, ...executions] } : prev)
+        }
         else if (parsed.type === 'tool_executing') {
           // Tool is being executed
-          setToolExecutions(prev => 
-            prev.map(te => 
-              te.name === parsed.name 
-                ? { ...te, status: 'executing' as const }
-                : te
-            )
-          )
-        } 
+          setRunTrace((prev) => {
+            if (!prev) return prev
+            const tools = prev.tools.map((t) => {
+              // Match by ID first (if available), fallback to name for backward compatibility
+              const matchesId = parsed.id && t.id === parsed.id
+              const matchesName = !parsed.id && t.name === parsed.name && (t.status === 'queued' || t.status === 'running')
+              if (matchesId || matchesName) {
+                return { ...t, status: 'running' as const, startedAt: t.startedAt || nowIso() }
+              }
+              return t
+            })
+            return { ...prev, tools }
+          })
+        }
         else if (parsed.type === 'tool_result') {
-          // Tool execution completed
-          setToolExecutions(prev => 
-            prev.map(te => 
-              te.name === parsed.name 
-                ? { 
-                    ...te, 
-                    result: parsed.result,
-                    status: parsed.result.success === false ? 'error' as const : 'completed' as const
-                  }
-                : te
-            )
-          )
-        } 
+          const succeeded = parsed.result?.success !== false
+          setRunTrace((prev) => {
+            if (!prev) return prev
+            const tools = prev.tools.map((t) => {
+              // Match by ID first (if available), fallback to name for backward compatibility
+              const matchesId = parsed.id && t.id === parsed.id
+              const matchesName = !parsed.id && t.name === parsed.name && (t.status === 'running' || t.status === 'queued')
+              if (matchesId || matchesName) {
+                const endedAt = nowIso()
+                const durationMs = t.startedAt ? (new Date(endedAt).getTime() - new Date(t.startedAt).getTime()) : undefined
+                const newStatus: ToolExecutionTrace['status'] = succeeded ? 'completed' : 'failed'
+                return {
+                  ...t,
+                  status: newStatus,
+                  endedAt,
+                  durationMs,
+                  outputRaw: parsed.result,
+                  links: extractLinks(parsed.result),
+                  outputSummary: Array.isArray(parsed.result?.result?.results) ? `${parsed.result.result.results.length} results` : undefined,
+                  error: succeeded ? null : { message: parsed.result?.error || 'Tool failed' },
+                }
+              }
+              return t
+            })
+            return { ...prev, tools }
+          })
+        }
         else if (parsed.type === 'content') {
           // Regular content
           appendResponse(parsed.content)
@@ -123,6 +189,7 @@ export function ResponsePanel() {
         else if (parsed.type === 'done' || parsed.done) {
           // Stream complete
           setIsStreaming(false)
+          setRunTrace((prev) => prev ? { ...prev, endedAt: nowIso() } : prev)
           if (currentStream.current) {
             api.stopStream(currentStream.current)
             currentStream.current = null
@@ -218,62 +285,21 @@ export function ResponsePanel() {
         </div>
       </div>
       <div className="px-4 py-3 overflow-hidden">
-        {/* Tool Executions Display */}
-        {toolExecutions.length > 0 && (
-          <div className="mb-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Wrench className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-              <div className="text-sm font-medium text-gray-700 dark:text-gray-300">Tool Executions</div>
-            </div>
-            <div className="space-y-2">
-              {toolExecutions.map((te, idx) => (
-                <div 
-                  key={te.id || idx} 
-                  className="border border-blue-200 dark:border-blue-800/50 rounded-md p-3 bg-blue-50/50 dark:bg-blue-950/20"
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <code className="text-sm font-semibold text-blue-900 dark:text-blue-100">{te.name}</code>
-                    {te.status === 'pending' && (
-                      <span className="text-xs text-gray-500 dark:text-gray-400">Pending</span>
-                    )}
-                    {te.status === 'executing' && (
-                      <span className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1">
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                        Executing...
-                      </span>
-                    )}
-                    {te.status === 'completed' && (
-                      <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
-                        <CheckCircle className="h-3 w-3" />
-                        Completed
-                      </span>
-                    )}
-                    {te.status === 'error' && (
-                      <span className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
-                        <XCircle className="h-3 w-3" />
-                        Error
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-                    <span className="font-medium">Args:</span> <code className="bg-white dark:bg-gray-900 px-1 py-0.5 rounded">{te.arguments}</code>
-                  </div>
-                  {te.result && (
-                    <details className="text-xs mt-2">
-                      <summary className="cursor-pointer text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100">
-                        View result
-                      </summary>
-                      <pre className="mt-2 p-2 bg-white dark:bg-gray-900 rounded overflow-x-auto text-xs border border-gray-200 dark:border-gray-700">
-                        {JSON.stringify(te.result, null, 2)}
-                      </pre>
-                    </details>
-                  )}
-                </div>
-              ))}
-            </div>
+        {/* Tool Chips summary */}
+        {runTrace?.tools?.length ? (
+          <div className="mb-3 flex justify-end">
+            <ToolChips run={runTrace} onOpen={(id) => { setInspectorOpen(true); setFocusToolId(id) }} />
           </div>
-        )}
-        
+        ) : null}
+
+        {/* Reasoning blocks (shown before search results) */}
+        {runTrace?.reasoning?.map((block, idx) => (
+          <ReasoningBlock key={block.id} content={block.content} index={idx} />
+        ))}
+
+        {/* Search results preview (T3-style) */}
+        <SearchResultsInline run={runTrace} />
+
         {/* Response Content */}
         <div className="prose prose-sm dark:prose-invert max-w-none break-words" aria-live="polite">
           {response ? (
@@ -287,7 +313,9 @@ export function ResponsePanel() {
             <p className="text-gray-500">No response yet. Press Generate to create.</p>
           )}
         </div>
+        <ResponseFootnotes run={runTrace} />
       </div>
+      <RunInspectorDrawer open={inspectorOpen} onClose={() => setInspectorOpen(false)} run={runTrace} focusToolId={focusToolId} onFocusTool={(id) => setFocusToolId(id)} />
     </section>
   )
 }

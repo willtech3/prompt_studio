@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 import os
 from typing import Optional
+import re
 
 from services.openrouter import OpenRouterService
 from services.tool_executor import ToolExecutor
@@ -97,7 +98,89 @@ async def stream_chat(
     logit_bias: Optional[str] = Query(None, description="JSON object mapping token IDs to bias values"),
     session: AsyncSession = Depends(get_session),
 ):
+    def parse_time_constraints(text: str) -> dict | None:
+        """Extract time constraints from prompt text and map to appropriate freshness period.
+
+        Returns a dict possibly containing:
+          - time_hint: 'day'|'week'|'month'|'year' (based on actual time range, not unit name)
+          - after: 'YYYY-MM-DD'
+          - before: 'YYYY-MM-DD'
+          - days_ago: int (actual number of days for precise mapping)
+
+        The time_hint now represents the ACTUAL time range for Brave API freshness:
+        - 'day' = last 1 day (pd)
+        - 'week' = last 7 days (pw)
+        - 'month' = last 30 days (pm)
+        - 'year' = last 365 days (py)
+        """
+        try:
+            text_l = (text or "").lower()
+            now = dt.datetime.utcnow()
+
+            # Helper to determine time_hint based on actual days
+            def get_time_hint_from_days(days: int) -> str:
+                if days <= 1:
+                    return "day"
+                elif days <= 7:
+                    return "week"
+                elif days <= 30:
+                    return "month"
+                else:
+                    return "year"
+
+            # Named spans
+            if re.search(r"\btoday\b", text_l):
+                return {"time_hint": "day", "after": now.strftime("%Y-%m-%d"), "days_ago": 1}
+            if re.search(r"\byesterday\b", text_l):
+                d = (now - dt.timedelta(days=1)).strftime("%Y-%m-%d")
+                return {"time_hint": "day", "after": d, "days_ago": 1}
+            if re.search(r"\bthis\s+week\b", text_l):
+                start = (now - dt.timedelta(days=now.weekday())).strftime("%Y-%m-%d")
+                return {"time_hint": "week", "after": start, "days_ago": 7}
+            if re.search(r"\blast\s+week\b", text_l):
+                start = (now - dt.timedelta(days=now.weekday()+7)).strftime("%Y-%m-%d")
+                return {"time_hint": "week", "after": start, "days_ago": 7}
+            if re.search(r"\bthis\s+month\b", text_l):
+                start = now.replace(day=1).strftime("%Y-%m-%d")
+                return {"time_hint": "month", "after": start, "days_ago": 30}
+            if re.search(r"\blast\s+month\b", text_l):
+                first_this = now.replace(day=1)
+                last_month_end = first_this - dt.timedelta(days=1)
+                start = last_month_end.replace(day=1).strftime("%Y-%m-%d")
+                return {"time_hint": "month", "after": start, "days_ago": 30}
+
+            # Relative: last/past N days|weeks|months|years
+            m = re.search(r"\b(last|past|in\s+the\s+last)\s+(\d{1,3})\s+(day|days|week|weeks|month|months|year|years)\b", text_l)
+            if m:
+                n = int(m.group(2))
+                unit = m.group(3)
+
+                # Calculate actual days
+                if "day" in unit:
+                    days = n
+                    delta = dt.timedelta(days=days)
+                elif "week" in unit:
+                    days = n * 7
+                    delta = dt.timedelta(days=days)
+                elif "month" in unit:
+                    days = n * 30
+                    delta = dt.timedelta(days=days)
+                else:  # year
+                    days = n * 365
+                    delta = dt.timedelta(days=days)
+
+                # Map to appropriate time_hint based on actual range
+                time_hint = get_time_hint_from_days(days)
+                return {
+                    "time_hint": time_hint,
+                    "after": (now - delta).strftime("%Y-%m-%d"),
+                    "days_ago": days
+                }
+        except Exception:
+            return None
+        return None
     async def generate():
+        sent_any_content = False
         # If no API key is set, return a helpful message.
         if not os.getenv("OPENROUTER_API_KEY"):
             yield "data: Set OPENROUTER_API_KEY to enable streaming.\n\n"
@@ -129,12 +212,21 @@ async def stream_chat(
 
         # Parse tool schemas if provided
         tool_schemas = None
+        tool_names: set[str] = set()
         if tools:
             try:
                 tool_schemas = json.loads(tools)
                 if not isinstance(tool_schemas, list):
                     yield f"data: {json.dumps({'error': 'Tools must be a JSON array'})}\n\n"
                     return
+                # Collect function names for fast checks (e.g., time/search availability)
+                for t in tool_schemas:
+                    try:
+                        n = t.get('function', {}).get('name')
+                        if n:
+                            tool_names.add(n)
+                    except Exception:
+                        pass
             except json.JSONDecodeError as e:
                 yield f"data: {json.dumps({'error': f'Invalid tools JSON: {str(e)}'})}\n\n"
                 return
@@ -166,7 +258,17 @@ async def stream_chat(
         if seed is not None:
             params["seed"] = seed
         if response_format:
-            params["response_format"] = response_format
+            # Normalize response_format for Chat Completions
+            # Accept either keywords (e.g., "json", "json_object") or a JSON object string
+            rf_text = str(response_format).strip()
+            try:
+                rf_obj = json.loads(rf_text)
+                if isinstance(rf_obj, dict):
+                    params["response_format"] = rf_obj
+            except Exception:
+                rf_lower = rf_text.lower()
+                if rf_lower in ("json", "json_object", "jsonobject"):
+                    params["response_format"] = {"type": "json_object"}
         if stop:
             # Accept either comma or newline separated values
             seps = [",", "\n"]
@@ -179,7 +281,14 @@ async def stream_chat(
         if logprobs is not None:
             params["logprobs"] = logprobs
         if top_logprobs is not None:
-            params["top_logprobs"] = top_logprobs
+            # Clamp to OpenRouter-allowed range [1,5]
+            try:
+                clamped_top = max(1, min(5, int(top_logprobs)))
+            except Exception:
+                clamped_top = 1
+            params["top_logprobs"] = clamped_top
+            # Ensure logprobs is enabled whenever top_logprobs is requested
+            params["logprobs"] = True
         if logit_bias:
             try:
                 params["logit_bias"] = json.loads(logit_bias)
@@ -191,13 +300,45 @@ async def stream_chat(
             # Tool calling loop
             if tool_schemas and tool_executor:
                 iteration = 0
-                while iteration < max_tool_calls:
+                # Allow unrestricted looping when tool_choice is 'auto' but guard with a soft ceiling
+                # If max_tool_calls is set high by client we honor it; otherwise use a generous default
+                limit = max_tool_calls or 20
+                should_force_tools_first_turn = False  # Track if we tried to force tools
+                while iteration < limit:
                     iteration += 1
                     
                     # Add tools to params for this iteration
                     call_params = params.copy()
                     call_params["tools"] = tool_schemas
-                    call_params["tool_choice"] = tool_choice if iteration == 1 else "auto"
+                    # Make search required on the first turn when present and prompt implies it needs current data
+                    wants_search = ("search_web" in tool_names)
+                    prompt_lower = (prompt or "").lower()
+
+                    # Check if prompt explicitly asks for searches, news, or recent information
+                    implies_needs_tools = (
+                        wants_search and (
+                            any(k in prompt_lower for k in ["news", "latest", "recent", "current", "last ", "past ", "find", "look up", "search"]) or
+                            bool(parse_time_constraints(f"{system or ''} {prompt}"))
+                        )
+                    )
+
+                    # Sanitize tool_choice for OpenAI-compatible Chat Completions:
+                    # - Only "auto" or "none" are valid generic values
+                    # - To force a specific tool, pass the tool name and translate to
+                    #   {"type": "function", "function": {"name": <tool_name>}}
+                    if tool_choice and tool_choice not in ("auto", "none"):
+                        # Treat non-standard value as a tool name if available
+                        if tool_choice in tool_names:
+                            call_params["tool_choice"] = {
+                                "type": "function",
+                                "function": {"name": tool_choice},
+                            }
+                            should_force_tools_first_turn = True
+                        else:
+                            # Unknown tool name -> fall back to auto
+                            call_params["tool_choice"] = "auto"
+                    else:
+                        call_params["tool_choice"] = "auto" if tool_choice != "none" else "none"
                     
                     # Call model (non-streaming for tool use)
                     response = await svc.completion(
@@ -207,7 +348,22 @@ async def stream_chat(
                     )
                     
                     message = response.get("choices", [{}])[0].get("message", {})
-                    
+
+                    # Check for reasoning content (e.g., Claude's extended thinking)
+                    # Some models return content blocks with thinking before tool calls
+                    reasoning_content = None
+                    if content_blocks := message.get("content"):
+                        # If content is a list of blocks (Anthropic format)
+                        if isinstance(content_blocks, list):
+                            for block in content_blocks:
+                                if isinstance(block, dict) and block.get("type") == "thinking":
+                                    reasoning_content = block.get("thinking", "")
+                                    break
+
+                    # Send reasoning to frontend if present
+                    if reasoning_content:
+                        yield f"data: {json.dumps({'type': 'reasoning', 'content': reasoning_content})}\n\n"
+
                     # Check if model wants to call tools
                     if tool_calls := message.get("tool_calls"):
                         # Notify frontend about tool calls
@@ -226,50 +382,156 @@ async def stream_chat(
                         
                         # Execute each tool
                         for tool_call in tool_calls:
+                            tool_call_id = tool_call.get("id", "unknown")
                             func_name = tool_call["function"]["name"]
                             func_args_str = tool_call["function"]["arguments"]
-                            
+
                             # Notify that we're executing
-                            yield f"data: {json.dumps({'type': 'tool_executing', 'name': func_name})}\n\n"
+                            yield f"data: {json.dumps({'type': 'tool_executing', 'id': tool_call_id, 'name': func_name})}\n\n"
                             
                             # Parse arguments
                             try:
                                 func_args = json.loads(func_args_str)
                             except json.JSONDecodeError:
                                 func_args = {}
+
+                            # If search is used and the prompt asks for a timeframe, add a dynamic, non-hardcoded hint
+                            if func_name == 'search_web' and ('get_current_time' in tool_names or True):
+                                try:
+                                    hint = parse_time_constraints(f"{system or ''} \n {prompt}")
+                                    # Do not override model-provided constraints
+                                    if hint:
+                                        for k in ('time_hint','after','before'):
+                                            if k not in func_args:
+                                                v = hint.get(k)
+                                                if v:
+                                                    func_args[k] = v
+                                except Exception:
+                                    pass
                             
                             # Execute tool
                             result = await tool_executor.execute(func_name, func_args)
-                            
+
                             # Send tool result to frontend
-                            yield f"data: {json.dumps({'type': 'tool_result', 'name': func_name, 'result': result})}\n\n"
-                            
-                            # Add tool result to conversation
+                            yield f"data: {json.dumps({'type': 'tool_result', 'id': tool_call_id, 'name': func_name, 'result': result})}\n\n"
+
+                            # Add tool result to conversation for the model to consume
+                            # Format per OpenRouter spec: role=tool, tool_call_id, and content as JSON string
+                            # Include success/error status in a clear format for the model
+                            if result.get("success"):
+                                # Tool succeeded - provide clean result data
+                                tool_content = json.dumps(result.get("result", {}))
+                            else:
+                                # Tool failed - provide error message
+                                tool_content = json.dumps({"error": result.get("error", "Tool execution failed")})
+
                             messages.append({
                                 "role": "tool",
                                 "tool_call_id": tool_call.get("id", "unknown"),
-                                "content": json.dumps(result)
+                                "content": tool_content,
                             })
-                        
-                        # Continue loop - model will process tool results
-                        continue
-                    else:
-                        # Model provided final answer without tools
-                        content = message.get("content", "")
-                        if content:
-                            # Stream the final content
-                            yield f"data: {json.dumps({'type': 'content', 'content': content})}\n\n"
+
+                        # Add a gentle reminder to the model that it has tool results to use
+                        # This helps models that might otherwise claim they don't have web access
+                        messages.append({
+                            "role": "user",
+                            "content": "Please use the tool results above to answer my original question."
+                        })
+
+                        # After executing tools, force the model to respond with text (no more tool calls)
+                        # Try non-streaming first for faster response, fall back to streaming if needed
+                        finalize_success = False
+
+                        try:
+                            # Attempt 1: Non-streaming with tool_choice='none' to force text response
+                            finalize_params = params.copy()
+                            finalize_params["tools"] = tool_schemas  # Keep tools available but don't use them
+                            finalize_params["tool_choice"] = "none"  # Prevent further tool calls
+
+                            finalize_response = await svc.completion(
+                                model=model,
+                                messages=messages,
+                                **finalize_params,
+                            )
+
+                            finalize_message = finalize_response.get("choices", [{}])[0].get("message", {})
+                            finalize_content = finalize_message.get("content", "")
+
+                            if finalize_content:
+                                yield f"data: {json.dumps({'type': 'content', 'content': finalize_content})}\n\n"
+                                finalize_success = True
+                                sent_any_content = True
+                                break
+                        except Exception as e:
+                            # Log error but continue to fallback
+                            yield f"data: {json.dumps({'type': 'debug', 'message': f'Non-streaming finalization failed: {str(e)}'})}\n\n"
+
+                        # Attempt 2: Streaming fallback if non-streaming failed or returned empty
+                        if not finalize_success:
+                            try:
+                                stream_params = params.copy()
+                                # Don't include tools parameter to prevent more tool calls
+
+                                final_content_parts = []
+                                async for chunk in svc.stream_completion(model=model, messages=messages, **stream_params):
+                                    final_content_parts.append(chunk)
+                                    yield f"data: {json.dumps({'type': 'content', 'content': chunk})}\n\n"
+                                    sent_any_content = True
+
+                                if final_content_parts:
+                                    break
+                            except Exception as e:
+                                yield f"data: {json.dumps({'type': 'error', 'error': f'Streaming finalization failed: {str(e)}'})}\n\n"
+                                break
+
+                        # Should not reach here, but if we do, break to prevent infinite loop
                         break
+                    else:
+                        # Model provided response without tool calls
+                        content = message.get("content", "")
+
+                        # Track if we've executed any tools in this run
+                        any_tools_executed = any(True for msg in messages if msg.get("role") == "tool")
+
+                        if content:
+                            # If iteration 1 with tool_choice=required/any and model still responded with text,
+                            # it means the model refused to use tools or doesn't support the parameter.
+                            # Send the response to the user (don't suppress it).
+
+                            # Only suppress on iteration 2 if we tried to force tools but model didn't call them
+                            if iteration == 2 and not any_tools_executed and should_force_tools_first_turn:
+                                # Give model one more chance to call tools
+                                messages.append(message)
+                                continue  # Silent continuation - no text sent to user
+                            else:
+                                # Send response to user
+                                yield f"data: {json.dumps({'type': 'content', 'content': content})}\n\n"
+                                sent_any_content = True
+                                break
+                        else:
+                            # No content and no tool calls - shouldn't happen, but handle gracefully
+                            if iteration <= 2 and not any_tools_executed:
+                                # Early iteration with no response - continue to give model another chance
+                                messages.append(message)
+                                continue
+                            else:
+                                yield f"data: {json.dumps({'type': 'content', 'content': 'No additional content generated.'})}\n\n"
+                                sent_any_content = True
+                                break
                 
                 # If we hit max iterations
-                if iteration >= max_tool_calls:
-                    yield f"data: {json.dumps({'type': 'warning', 'message': f'Reached maximum tool call iterations ({max_tool_calls})'})}\n\n"
+                if iteration >= limit:
+                    yield f"data: {json.dumps({'type': 'warning', 'message': f'Reached maximum tool call iterations ({limit})'})}\n\n"
+                    if not sent_any_content:
+                        yield f"data: {json.dumps({'type': 'content', 'content': 'Stopped after maximum tool calls. No further content generated by the model.'})}\n\n"
+                        sent_any_content = True
             
             else:
                 # Regular streaming without tools
                 async for chunk in svc.stream_completion(model=model, messages=messages, **params):
                     # Wrap chunk in JSON format expected by frontend
                     yield f"data: {json.dumps({'type': 'content', 'content': chunk})}\n\n"
+                    sent_any_content = True
             
             # Send done signal
             yield f"data: {json.dumps({'type': 'done', 'done': True})}\n\n"

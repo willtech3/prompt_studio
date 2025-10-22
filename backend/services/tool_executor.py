@@ -12,7 +12,8 @@ Security principles:
 """
 
 import httpx
-from datetime import datetime, timezone
+import os
+from datetime import datetime, timezone as dt_timezone
 import json
 from typing import Any, Dict, Optional
 import asyncio
@@ -30,7 +31,8 @@ class ToolExecutor:
             "get_current_time": self._get_current_time,
             "calculate": self._calculate,
         }
-        self.timeout = 5.0  # 5 second timeout for external calls
+        self.timeout = 7.5  # trade a bit more latency for better results
+        self.brave_key = os.getenv("BRAVE_API_KEY")
     
     def get_available_tools(self) -> list[dict]:
         """
@@ -143,7 +145,7 @@ class ToolExecutor:
                 "error": f"Tool '{tool_name}' failed: {str(e)}"
             }
     
-    async def _search_web(self, query: str, num_results: int = 3) -> dict:
+    async def _search_web(self, query: str, num_results: int = 3, time_hint: str | None = None, after: str | None = None, before: str | None = None) -> dict:
         """
         Search the web using DuckDuckGo Instant Answer API.
         
@@ -165,7 +167,39 @@ class ToolExecutor:
         
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                # DuckDuckGo Instant Answer API
+                # Prefer Brave Search API when available for higher-quality results
+                if self.brave_key:
+                    freshness_map = {"day": "pd", "week": "pw", "month": "pm", "year": "py"}
+                    params = {
+                        "q": query,
+                        "count": max(1, min(5, num_results)),
+                    }
+                    if time_hint in freshness_map:
+                        params["freshness"] = freshness_map[time_hint]
+                    r = await client.get(
+                        "https://api.search.brave.com/res/v1/web/search",
+                        params=params,
+                        headers={
+                            "Accept": "application/json",
+                            "X-Subscription-Token": self.brave_key,
+                        },
+                    )
+                    r.raise_for_status()
+                    data = r.json()
+                    web = (data or {}).get("web", {})
+                    results_json = web.get("results", []) or []
+                    results = []
+                    for item in results_json[:num_results]:
+                        url = item.get("url", "")
+                        results.append({
+                            "title": item.get("title") or url,
+                            "snippet": item.get("snippet") or item.get("description", ""),
+                            "url": url,
+                            "source": (httpx.URL(url).host if url else "Brave"),
+                        })
+                    return {"query": query, "num_results": len(results), "results": results, "provider": "brave"}
+
+                # Fallback: DuckDuckGo Instant Answer (fast but not always rich)
                 response = await client.get(
                     "https://api.duckduckgo.com/",
                     params={
@@ -177,11 +211,7 @@ class ToolExecutor:
                 )
                 response.raise_for_status()
                 data = response.json()
-                
-                # Extract results
                 results = []
-                
-                # Add main abstract if available
                 if data.get("AbstractText"):
                     results.append({
                         "title": data.get("Heading", query),
@@ -189,8 +219,6 @@ class ToolExecutor:
                         "url": data.get("AbstractURL", ""),
                         "source": data.get("AbstractSource", "DuckDuckGo")
                     })
-                
-                # Add related topics
                 for topic in data.get("RelatedTopics", [])[:num_results - len(results)]:
                     if isinstance(topic, dict) and "Text" in topic:
                         results.append({
@@ -199,21 +227,14 @@ class ToolExecutor:
                             "url": topic.get("FirstURL", ""),
                             "source": "DuckDuckGo"
                         })
-                
-                # If no results, provide explanation
                 if not results:
                     results = [{
                         "title": "No instant results found",
-                        "snippet": f"DuckDuckGo did not return instant answers for '{query}'. Try a more specific query or a different search engine.",
+                        "snippet": f"DuckDuckGo did not return instant answers for '{query}'.",
                         "url": f"https://duckduckgo.com/?q={query}",
                         "source": "DuckDuckGo"
                     }]
-                
-                return {
-                    "query": query,
-                    "num_results": len(results),
-                    "results": results[:num_results]
-                }
+                return {"query": query, "num_results": len(results), "results": results[:num_results], "provider": "duckduckgo"}
                 
         except httpx.HTTPError as e:
             return {
@@ -237,7 +258,7 @@ class ToolExecutor:
             Dictionary with current time information
         """
         try:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(dt_timezone.utc)
             
             return {
                 "timestamp": now.isoformat(),

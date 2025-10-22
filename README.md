@@ -70,6 +70,19 @@ npm run dev
 
 **Note:** Database is optional for basic chat. Required for snapshots, best practices, and model catalog.
 
+## Environment Variables
+
+Set these in `.env` (backend loads both `backend/.env` and project root `.env`):
+
+- `OPENROUTER_API_KEY` — your OpenRouter API key (required for API calls)
+- `OPENROUTER_BASE_URL` — override base URL if needed (optional)
+- `OPENROUTER_TIMEOUT` — request timeout in seconds, default `120` (optional)
+- `DATABASE_URL` — PostgreSQL connection string for persistence (optional)
+- `OPENROUTER_HTTP_REFERER` — app/site URL for OpenRouter attribution header (optional)
+- `OPENROUTER_X_TITLE` — human-readable app name for OpenRouter attribution header (optional)
+
+Attribution headers help your app appear on OpenRouter’s leaderboard and request pages. When the last two are set, the backend automatically includes `HTTP-Referer` and `X-Title` headers on OpenRouter requests.
+
 ## Features
 
 **Streaming & Rendering:**

@@ -21,12 +21,25 @@ class OpenRouterService:
 
     async def _client_ctx(self) -> httpx.AsyncClient:
         if self._client is None:
+            # Base headers
+            headers: Dict[str, str] = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            }
+
+            # Optional OpenRouter attribution headers
+            # Set via env to support leaderboard and app attribution
+            # https://openrouter.ai/docs#headers
+            referer = os.getenv("OPENROUTER_HTTP_REFERER")
+            title = os.getenv("OPENROUTER_X_TITLE")
+            if referer:
+                headers["HTTP-Referer"] = referer
+            if title:
+                headers["X-Title"] = title
+
             self._client = httpx.AsyncClient(
                 base_url=self.base_url,
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
+                headers=headers,
                 timeout=float(os.getenv("OPENROUTER_TIMEOUT", "120")),
             )
         return self._client
