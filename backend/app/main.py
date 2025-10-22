@@ -21,6 +21,13 @@ from models.provider_content import ProviderContent
 import uuid
 from sqlalchemy import select
 import datetime as dt
+from .routers import (
+    chat as chat_routes,
+    models as model_routes,
+    providers as provider_routes,
+    saves as saves_routes,
+    optimize as optimize_routes,
+)
 
 
 def get_cors_origins() -> list[str]:
@@ -61,6 +68,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Register placeholder routers (no behavior changes)
+app.include_router(chat_routes.router)
+app.include_router(model_routes.router)
+app.include_router(provider_routes.router)
+app.include_router(saves_routes.router)
+app.include_router(optimize_routes.router)
 
 
 @app.get("/health")
