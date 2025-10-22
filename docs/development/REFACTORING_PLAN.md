@@ -2,14 +2,14 @@
 
 ## Current State
 
-`backend/app/main.py` is 829 lines containing:
+`backend/app/main.py` is ~960 lines containing:
 
-- Configuration and app initialization (lines 1-71)
-- Chat streaming endpoint with tool calling (lines 73-451, **378 lines**)
-- Model catalog endpoints (lines 454-481)
-- Provider content endpoints (lines 484-577)
-- Prompt optimization endpoint with constants (lines 580-750)
-- Snapshot/save CRUD endpoints (lines 753-829)
+- App configuration and initialization
+- Chat streaming endpoint with tool calling
+- Model catalog endpoints
+- Provider content endpoints and guides
+- Prompt optimization endpoint (uses `META_PROMPT` and `PROVIDER_HINTS`)
+- Snapshot/save CRUD endpoints
 
 ## Proposed Structure
 
@@ -95,7 +95,6 @@ from config.db import get_session, create_all, try_get_session
 7. Extract saves endpoints to app/routers/saves.py with models
 8. Refactor main.py to minimal app initialization and router registration
 9. Test all endpoints work correctly after refactoring using Bruno collection
-
 
 
 

@@ -1,6 +1,6 @@
 # Technical Debt Analysis - Prompt Engineering Studio
 
-**Analysis Date**: October 15, 2025
+**Analysis Date**: October 22, 2025
 **Analysis Method**: cook-en:tech-debt methodology
 **Project Status**: Greenfield (MVP/Development Phase, Zero Users)
 
@@ -12,8 +12,8 @@
 
 The Prompt Engineering Studio project is in good overall health for a greenfield MVP, with modern dependencies and well-organized service/model layers. However, two critical issues threaten future scalability:
 
-1. **Monolithic main.py (881 lines)** - All API logic in a single file
-2. **Zero test coverage** - No test infrastructure exists
+1. **Monolithic main.py (~960 lines)** - All API logic in a single file
+2. **Zero test coverage** - No test infrastructure exists (recommend minimal smoke tests now)
 
 These issues should be addressed immediately while the codebase is small. Investment: 24 hours. Expected 3-month ROI: 212%.
 
@@ -54,9 +54,9 @@ Project Health Score: 68/100
 
 ### 🚨 [P0] Fix Immediately
 
-#### 1. Monolithic main.py (881 lines)
+#### 1. Monolithic main.py (~960 lines)
 
-**Location**: `backend/app/main.py:1-881`
+**Location**: `backend/app/main.py` (monolithic)
 **Impact**: Extremely High - Affects all backend development
 **Fix Cost**: 8-12 hours
 **Time Savings**: 5x ROI (invest 10h → save 50h over 3 months)
@@ -64,7 +64,7 @@ Project Health Score: 68/100
 
 **Problem Description**:
 
-The entire FastAPI application lives in a single 881-line file containing:
+The entire FastAPI application lives in a single ~960-line file containing:
 - 14 API endpoints across 5 different domains
 - Business logic mixed directly with route handlers
 - 680 lines of hardcoded constants (META_PROMPT, PROVIDER_HINTS)
@@ -82,13 +82,13 @@ The entire FastAPI application lives in a single 881-line file containing:
 | Code Review | 30+ minutes | 60+ minutes per PR |
 | Refactoring | Risky | EXTREMELY RISKY |
 
-**File Breakdown**:
-- Lines 1-64: Imports, utilities, app setup (64 lines)
-- Lines 66-504: Chat streaming endpoint (438 lines!)
-- Lines 507-535: Model endpoints (28 lines)
-- Lines 537-630: Provider content endpoints (93 lines)
-- Lines 633-803: Prompt optimization endpoint (170 lines, includes 680 lines of prompts)
-- Lines 806-881: Snapshot CRUD endpoints (75 lines)
+**File Breakdown (approximate, ranges drift as code evolves)**:
+- Imports/utilities/app setup
+- Chat streaming endpoint (tool calling loop included)
+- Model catalog endpoints
+- Provider content endpoints (guides and best practices)
+- Prompt optimization endpoint (uses `META_PROMPT` and `PROVIDER_HINTS` constants)
+- Snapshot/save CRUD endpoints
 
 **Recommended Architecture**:
 
@@ -976,7 +976,7 @@ Month 9: Forced rewrite (200+ hours)
 | Task | Hours | ROI | Priority |
 |------|-------|-----|----------|
 | 1. Refactor main.py into modular structure | 12h | 5x | CRITICAL |
-| 2. Add core test infrastructure and tests | 12h | 10x | CRITICAL |
+| 2. Add minimal smoke tests (health + streaming) | 3h | 3x | HIGH |
 
 **Total P0**: 24 hours
 **Expected Outcome**: +20% dev speed, 30% test coverage, scalable architecture
@@ -1026,13 +1026,12 @@ Month 9: Forced rewrite (200+ hours)
 
 - [ ] main.py reduced to < 100 lines
 - [ ] All routes in separate files
-- [ ] Test coverage ≥ 30%
-- [ ] All critical paths tested
+- [ ] Basic smoke tests in place (health, streaming)
 - [ ] Development speed +20%
 
 ### Short-term Success (Month 1)
 
-- [ ] Test coverage ≥ 50%
+- [ ] Add targeted tests for key routes (models, providers, saves)
 - [ ] All frontend components < 300 lines
 - [ ] API documentation complete
 - [ ] Development speed +30%
@@ -1040,7 +1039,7 @@ Month 9: Forced rewrite (200+ hours)
 
 ### Long-term Success (Month 3)
 
-- [ ] Test coverage ≥ 60%
+- [ ] Progressive test coverage growth as features stabilize
 - [ ] CI/CD pipeline operational
 - [ ] All constants externalized
 - [ ] State management refactored
@@ -1059,7 +1058,7 @@ The Prompt Engineering Studio has a solid foundation with modern dependencies an
 **The window to fix these issues is now**, while the codebase is small and there are no users. Waiting will make these problems 10x more expensive to solve.
 
 **Recommended immediate action**:
-1. Week 1: Refactor main.py + add tests (24h)
+1. Week 1: Refactor main.py (12h) + add smoke tests (3h)
 2. Week 2-3: Polish frontend + documentation (16h)
 3. Month 2-3: Add automation (8h)
 
@@ -1073,6 +1072,6 @@ The technical debt exists, but it's fixable with focused effort over the next 3 
 
 ---
 
-**Analysis performed by**: Claude Code with cook-en:tech-debt methodology
-**Analysis date**: October 15, 2025
-**Next review recommended**: December 15, 2025 (2 months)
+**Analysis performed by**: Codex CLI (based on cook-en:tech-debt methodology)
+**Analysis date**: October 22, 2025 (updated)
+**Next review recommended**: December 22, 2025 (2 months)
