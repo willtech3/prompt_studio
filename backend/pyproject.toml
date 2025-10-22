@@ -53,6 +53,8 @@ python-downloads = "automatic"
 [tool.ruff]
 line-length = 88
 target-version = "py313"
+
+[tool.ruff.lint]
 select = [
     "E",    # pycodestyle errors
     "W",    # pycodestyle warnings
