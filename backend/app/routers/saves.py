@@ -11,18 +11,22 @@ from models.snapshot import Snapshot
 
 router = APIRouter(prefix="/api/saves", tags=["saves"])
 
-
-# Pydantic Models
-
-
 class SaveRequest(BaseModel):
+    """Request model for creating a snapshot save.
+
+    Attributes:
+        title: Optional title for the save
+        kind: Type of save - 'system', 'user', 'prompt', or 'state'
+        provider: AI provider name (e.g., 'anthropic', 'openai')
+        model: Model identifier (e.g., 'claude-sonnet-4-5')
+        data: Arbitrary dict containing snapshot data such as system_prompt,
+              user_prompt, response, parameters, notes, etc.
+    """
     title: str | None = None
     kind: str | None = None  # 'system','user','prompt','state'
     provider: str | None = None
     model: str | None = None
-    data: dict | None = (
-        None  # arbitrary: system_prompt, user_prompt, response, parameters, notes
-    )
+    data: dict | None = None
 
 
 class SaveResponse(BaseModel):
@@ -41,10 +45,6 @@ class SaveItem(BaseModel):
     provider: str | None = None
     model: str | None = None
     created_at: dt.datetime | None = None
-
-
-# Endpoints
-
 
 @router.post("", response_model=SaveResponse)
 async def create_save(

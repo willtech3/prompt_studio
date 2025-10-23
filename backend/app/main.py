@@ -1,15 +1,11 @@
 import contextlib
-import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from config.db import create_all, get_session, init_engine
-from services.openrouter import OpenRouterService
+from config.db import create_all, init_engine
 
 from .routers import (
     chat as chat_routes,
