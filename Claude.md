@@ -22,9 +22,8 @@ Prompt Engineering Studio is a modern web application for optimizing and evaluat
 ### Backend (Python 3.13+)
 - **Framework**: FastAPI (async, high-performance)
 - **Package Manager**: uv (modern Python package management)
-- **Database**: PostgreSQL 16 with SQLAlchemy 2.0
-- **Authentication**: JWT tokens
-- **API Integration**: OpenRouter for 16 AI models
+- **Database**: PostgreSQL 16 with SQLAlchemy 2.0 (optional)
+- **API Integration**: OpenRouter for 16+ AI models
 
 ### Frontend (React 19)
 - **Framework**: React 19 with TypeScript
@@ -34,43 +33,54 @@ Prompt Engineering Studio is a modern web application for optimizing and evaluat
 - **Build Tool**: Vite
 - **Data Fetching**: TanStack Query
 
-## Key Features (MVP to Full)
+## Implemented Features
 
-### MVP Features
-1. User authentication (register/login)
-2. Single prompt execution with OpenRouter
-3. Basic prompt storage and retrieval
-4. Simple model selection (3-5 popular models)
-5. Basic response display
+### Core Features (✅ Complete)
+1. Chat streaming with 16+ OpenRouter models
+2. Server-Sent Events (SSE) for real-time responses
+3. Variable interpolation with `{{variable}}` syntax
+4. Model parameter controls (temperature, top-p, top-k, etc.)
+5. Save/load prompt snapshots
+6. AI-powered prompt optimization
+7. Provider-specific best practices and guides
+8. Tool calling (web search via Brave, time, calculator)
+9. Model catalog with refresh capability
+10. Reasoning effort control for compatible models
 
-### Core Features (Post-MVP)
-1. Prompt versioning and history
-2. Variable interpolation in prompts
-3. Model comparison (side-by-side)
-4. Token counting and cost estimation
-5. Prompt templates library
+### Future Features (Not Implemented)
+1. User authentication (no login/register yet)
+2. Multi-user support and team collaboration
+3. Evaluation metrics and scoring
+4. A/B testing framework
+5. Batch processing
+6. Cost tracking and analytics
 
-### Advanced Features
-1. Evaluation metrics and scoring
-2. A/B testing framework
-3. Best practices recommendations
-4. Batch processing
-5. Team collaboration
-
-## Database Schema (Simplified for MVP)
+## Database Schema (Current)
 ```sql
-users (id, email, username, password_hash, openrouter_api_key)
-prompts (id, user_id, title, content, created_at)
-executions (id, prompt_id, model, request, response, tokens, cost)
-```
+-- Optional tables (app works without database)
+model_configs (id, model_id, model_name, provider, context_length, pricing, ...)
+provider_content (id, provider_id, content_type, model_id, title, content, ...)
+snapshots (id, title, kind, provider, model, data, created_at, updated_at)
 
-## API Structure
+-- Defined but not yet used
+users (id, email, username, password_hash, is_active, created_at, updated_at)
 ```
-/api/auth/register    - User registration
-/api/auth/login       - User login
-/api/prompts          - CRUD for prompts
-/api/execute          - Execute prompt with model
-/api/models           - List available models
+Note: Database is optional. The app functions without it for basic chat.
+
+## API Endpoints
+```
+GET  /health                              - Health check
+GET  /api/chat/stream                     - Stream chat with tool calling
+POST /api/optimize                        - Optimize prompts using meta-prompt
+GET  /api/models                          - List available models
+GET  /api/models/{model_path}/info        - Get model details
+POST /api/models/refresh                  - Refresh model catalog from OpenRouter
+GET  /api/providers                       - List providers
+GET  /api/providers/{id}/guide            - Get optimization guide
+GET  /api/providers/{id}/prompting-guides - Get prompting guides
+POST /api/saves                           - Create snapshot
+GET  /api/saves                           - List snapshots
+GET  /api/saves/{id}                      - Get snapshot by ID
 ```
 
 ## Development Approach
@@ -89,10 +99,19 @@ executions (id, prompt_id, model, request, response, tokens, cost)
 ## File Structure
 ```
 prompt_studio/
-├── backend/          # FastAPI application
-├── frontend/         # React application
-├── database/         # Migration scripts
-└── docs/            # Documentation
+├── backend/
+│   ├── app/
+│   │   ├── main.py           # FastAPI app entry point
+│   │   ├── routers/          # API endpoints (chat, models, optimize, saves, providers)
+│   │   └── core/             # Configuration (CORS, env loading)
+│   ├── models/               # SQLAlchemy models (user, model_config, snapshot, provider_content)
+│   ├── services/             # External services (openrouter, model_catalog, tool_executor)
+│   ├── config/               # Database config, optimization prompts
+│   ├── alembic/              # Database migrations
+│   ├── scripts/              # Utility scripts (seed_provider_content.py)
+│   └── justfile              # Development commands
+├── frontend/                 # React application
+└── docs/                     # Documentation
 ```
 
 ## Development Workflow
@@ -140,23 +159,30 @@ All commands use `uv run` internally, so you never need to manually activate the
 - **User**: Successfully execute prompts, save/load prompts, compare models
 - **Business**: Track token usage, optimize costs, improve prompt quality
 
-## Current Status
-- Project structure created ✅
-- Documentation prepared ✅
-- Ready to start MVP implementation
+## Current Status (October 2025)
+- ✅ MVP Complete - All core features implemented
+- ✅ Backend fully functional with streaming, tool calling, optimization
+- ✅ Frontend with React 19, full UI implementation
+- ✅ Database schema and migrations in place
+- ✅ Model catalog with 16+ OpenRouter models
+- ✅ Provider best practices and guides
+- ⏳ No authentication yet (planned for multi-user support)
+- ⏳ No automated tests yet (greenfield phase)
 
-## Next Immediate Steps
-1. Set up Python 3.13+ with uv
-2. Create basic FastAPI application
-3. Set up PostgreSQL database
-4. Implement user authentication
-5. Create simple prompt execution endpoint
+## Recent Completed Work
+1. Backend refactoring (main.py reduced from 960 to 62 lines)
+2. Router extraction (chat, models, optimize, saves, providers)
+3. Tool calling implementation (web search, time, calculator)
+4. Prompt optimization with meta-prompts
+5. Snapshot save/load functionality
+6. Provider-specific guides and best practices
 
-## Questions/Decisions Needed
-- Hosting platform preference?
-- Budget for OpenRouter API?
-- Target number of users for MVP?
-- Preferred authentication method (email/password, OAuth, both)?
+## Next Steps
+1. Add basic integration tests for critical endpoints
+2. Decide on authentication approach (implement or defer)
+3. Consider consolidating configuration into single settings module
+4. Extract large chat router into smaller, focused modules
+5. Add CI/CD pipeline when ready for team collaboration
 
 ## 🚨 NON-NEGOTIABLE RULES
 1. **USE JUSTFILE COMMANDS** - Always use commands from `backend/justfile` for Python/API development tasks (start, stop, test, lint, format, etc.) instead of running commands directly

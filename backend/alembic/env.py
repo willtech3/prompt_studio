@@ -1,10 +1,8 @@
-from logging.config import fileConfig
-import os
 import sys
+from logging.config import fileConfig
 from pathlib import Path
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+from sqlalchemy import engine_from_config, pool
 
 from alembic import context
 
@@ -13,7 +11,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 # Import Base and models
 from config.db import Base, settings
-from models import User, ModelConfig, Snapshot, ProviderContent
 
 # All models now use a single Base class
 target_metadata = Base.metadata

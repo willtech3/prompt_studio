@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from typing import Any
-
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .openrouter import OpenRouterService
 from models.model_config import ModelConfig
+
+from .openrouter import OpenRouterService
 
 
 async def refresh_model_catalog(session: AsyncSession) -> dict[str, int]:

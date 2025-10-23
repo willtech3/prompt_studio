@@ -11,6 +11,7 @@ from models.snapshot import Snapshot
 
 router = APIRouter(prefix="/api/saves", tags=["saves"])
 
+
 class SaveRequest(BaseModel):
     """Request model for creating a snapshot save.
 
@@ -22,6 +23,7 @@ class SaveRequest(BaseModel):
         data: Arbitrary dict containing snapshot data such as system_prompt,
               user_prompt, response, parameters, notes, etc.
     """
+
     title: str | None = None
     kind: str | None = None  # 'system','user','prompt','state'
     provider: str | None = None
@@ -45,6 +47,7 @@ class SaveItem(BaseModel):
     provider: str | None = None
     model: str | None = None
     created_at: dt.datetime | None = None
+
 
 @router.post("", response_model=SaveResponse)
 async def create_save(
