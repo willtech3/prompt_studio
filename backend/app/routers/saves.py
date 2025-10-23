@@ -11,17 +11,13 @@ from models.snapshot import Snapshot
 
 router = APIRouter(prefix="/api/saves", tags=["saves"])
 
-
-# Pydantic Models
-
-
 class SaveRequest(BaseModel):
     title: str | None = None
     kind: str | None = None  # 'system','user','prompt','state'
     provider: str | None = None
     model: str | None = None
     data: dict | None = (
-        None  # arbitrary: system_prompt, user_prompt, response, parameters, notes
+        None
     )
 
 
@@ -41,10 +37,6 @@ class SaveItem(BaseModel):
     provider: str | None = None
     model: str | None = None
     created_at: dt.datetime | None = None
-
-
-# Endpoints
-
 
 @router.post("", response_model=SaveResponse)
 async def create_save(
