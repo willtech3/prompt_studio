@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, AsyncGenerator, Dict, List, Optional
+import os
+from collections.abc import AsyncGenerator
+from typing import Any
 
 import httpx
-import os
 
 
 class OpenRouterService:
@@ -14,15 +15,15 @@ class OpenRouterService:
     - Streaming returns raw text chunks suitable for SSE forwarding.
     """
 
-    def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
+    def __init__(self, api_key: str | None = None, base_url: str | None = None):
         self.api_key = api_key or os.getenv("OPENROUTER_API_KEY", "")
         self.base_url = base_url or os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-        self._client: Optional[httpx.AsyncClient] = None
+        self._client: httpx.AsyncClient | None = None
 
     async def _client_ctx(self) -> httpx.AsyncClient:
         if self._client is None:
             # Base headers
-            headers: Dict[str, str] = {
+            headers: dict[str, str] = {
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
             }
@@ -44,7 +45,7 @@ class OpenRouterService:
             )
         return self._client
 
-    async def list_models(self) -> Dict[str, Any]:
+    async def list_models(self) -> dict[str, Any]:
         client = await self._client_ctx()
         r = await client.get("/models")
         r.raise_for_status()
@@ -53,11 +54,11 @@ class OpenRouterService:
     async def completion(
         self,
         model: str,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         **params: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         client = await self._client_ctx()
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
         }
@@ -81,16 +82,16 @@ class OpenRouterService:
     async def stream_completion(
         self,
         model: str,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         **params: Any,
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[str]:
         """Stream completion chunks from OpenRouter as raw text.
 
         Yields text content deltas suitable for SSE `data: <chunk>\n\n` forwarding.
         """
         client = await self._client_ctx()
 
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
             "stream": True,

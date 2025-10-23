@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import datetime as dt
-from sqlalchemy import String, Text, JSON, DateTime
+
+from sqlalchemy import JSON, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from config.db import Base

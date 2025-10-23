@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import datetime as dt
 import uuid as uuid_pkg
-from sqlalchemy import String, DateTime, Text
+
+from sqlalchemy import DateTime, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 

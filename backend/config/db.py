@@ -1,11 +1,15 @@
 from __future__ import annotations
 
-import os
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import DeclarativeBase
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy.orm import DeclarativeBase
 
 
 class Base(DeclarativeBase):
@@ -42,7 +46,7 @@ def init_engine() -> AsyncEngine | None:
     return _engine
 
 
-async def get_session() -> AsyncGenerator[AsyncSession, None]:
+async def get_session() -> AsyncGenerator[AsyncSession]:
     if _sessionmaker is None:
         init_engine()
     if _sessionmaker is None:
@@ -51,7 +55,7 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
         yield session
 
 
-async def try_get_session() -> AsyncGenerator[AsyncSession | None, None]:
+async def try_get_session() -> AsyncGenerator[AsyncSession | None]:
     """Dependency that yields None when DATABASE_URL is not configured.
 
     Useful for endpoints where DB is optional; avoids raising before handler runs.

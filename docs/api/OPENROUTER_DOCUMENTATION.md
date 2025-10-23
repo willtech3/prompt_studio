@@ -1,6 +1,6 @@
 # OpenRouter API Documentation
 
-> **Last Updated:** January 2025
+> **Last Updated:** October 23, 2025
 > **API Version:** v1
 > **Base URL:** `https://openrouter.ai/api/v1`
 
@@ -98,6 +98,7 @@ POST /api/v1/chat/completions
 | `stream` | boolean | No | Enable streaming responses |
 | `tools` | array | No | Tool/function definitions (see Tool Calling section) |
 | `tool_choice` | string/object | No | Control tool usage: "auto", "none", "required", or specific function |
+| `parallel_tool_calls` | boolean | No | Allow simultaneous tool execution (default: true) |
 | `response_format` | object | No | Force output format (e.g., `{"type": "json_object"}`) |
 | `logprobs` | boolean | No | Return log probabilities |
 | `top_logprobs` | integer | No | Number of top tokens to include (1-5) |
@@ -179,6 +180,27 @@ Controls how the model uses tools:
   }
 }
 ```
+
+### Parallel Tool Calls
+
+Controls whether the model can call multiple tools simultaneously:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `parallel_tool_calls` | boolean | `true` | When `true`, model can call multiple functions simultaneously. When `false`, functions are called sequentially. |
+
+**Example:**
+```json
+{
+  "tools": [...],
+  "tool_choice": "auto",
+  "parallel_tool_calls": true
+}
+```
+
+**When to use:**
+- `true` (default): Enable when tools are independent and can run concurrently
+- `false`: Use when tools must execute in sequence or have dependencies
 
 ### Tool Call Response Format
 

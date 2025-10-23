@@ -6,10 +6,11 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker
+
 from config.db import get_database_url, init_engine
 from models.provider_content import ProviderContent
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 # Path to prompting guides documentation
 DOCS_DIR = Path(__file__).resolve().parents[2] / "docs" / "prompting_guides"

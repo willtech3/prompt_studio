@@ -11,19 +11,18 @@ Security principles:
 - Structured error responses
 """
 
-import httpx
-import os
-from datetime import datetime, timezone as dt_timezone
-import json
-from typing import Any, Dict, Optional
-import asyncio
 import ast
+import asyncio
 import operator
+import os
+from datetime import UTC, datetime
+
+import httpx
 
 
 class ToolExecutor:
     """Execute safe, predefined tools for prompt testing."""
-    
+
     def __init__(self):
         """Initialize tool executor with available tools."""
         self.tools = {
@@ -33,7 +32,7 @@ class ToolExecutor:
         }
         self.timeout = 7.5  # trade a bit more latency for better results
         self.brave_key = os.getenv("BRAVE_API_KEY")
-    
+
     def get_available_tools(self) -> list[dict]:
         """
         Return OpenAI-compatible tool schemas for all available tools.
@@ -99,7 +98,7 @@ class ToolExecutor:
                 }
             }
         ]
-    
+
     async def execute(self, tool_name: str, arguments: dict) -> dict:
         """
         Execute a tool with given arguments.
@@ -118,7 +117,7 @@ class ToolExecutor:
                 "success": False,
                 "error": f"Unknown tool: {tool_name}. Available tools: {', '.join(self.tools.keys())}"
             }
-        
+
         try:
             # Execute tool with timeout protection
             result = await asyncio.wait_for(
@@ -133,7 +132,7 @@ class ToolExecutor:
                     "result": result,
                 }
             return {"success": True, "result": result}
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return {
                 "success": False,
                 "error": f"Tool '{tool_name}' timed out after {self.timeout} seconds"
@@ -148,7 +147,7 @@ class ToolExecutor:
                 "success": False,
                 "error": f"Tool '{tool_name}' failed: {str(e)}"
             }
-    
+
     async def _search_web(self, query: str, num_results: int = 3, time_hint: str | None = None, after: str | None = None, before: str | None = None) -> dict:
         """
         Search the web using DuckDuckGo Instant Answer API.
@@ -166,9 +165,9 @@ class ToolExecutor:
         # Validate inputs
         if not query or not query.strip():
             return {"error": "Query cannot be empty"}
-        
+
         num_results = max(1, min(5, num_results))  # Clamp to 1-5
-        
+
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 # Prefer Brave Search API when available for higher-quality results
@@ -239,7 +238,7 @@ class ToolExecutor:
                         "source": "DuckDuckGo"
                     }]
                 return {"query": query, "num_results": len(results), "results": results[:num_results], "provider": "duckduckgo"}
-                
+
         except httpx.HTTPError as e:
             return {
                 "error": f"Search failed: {str(e)}",
@@ -250,7 +249,7 @@ class ToolExecutor:
                 "error": f"Unexpected error during search: {str(e)}",
                 "query": query
             }
-    
+
     async def _get_current_time(self, timezone: str = "UTC") -> dict:
         """
         Get current date and time.
@@ -262,8 +261,8 @@ class ToolExecutor:
             Dictionary with current time information
         """
         try:
-            now = datetime.now(dt_timezone.utc)
-            
+            now = datetime.now(UTC)
+
             return {
                 "timestamp": now.isoformat(),
                 "timezone": "UTC",
@@ -276,7 +275,7 @@ class ToolExecutor:
             return {
                 "error": f"Failed to get time: {str(e)}"
             }
-    
+
     async def _calculate(self, expression: str) -> dict:
         """
         Safely evaluate a mathematical expression using AST parsing.
@@ -292,7 +291,7 @@ class ToolExecutor:
         """
         if not expression or not expression.strip():
             return {"error": "Expression cannot be empty"}
-        
+
         # Define allowed operators
         allowed_operators = {
             ast.Add: operator.add,
@@ -303,20 +302,20 @@ class ToolExecutor:
             ast.USub: operator.neg,  # Unary minus
             ast.UAdd: operator.pos,  # Unary plus
         }
-        
+
         try:
             # Parse expression into AST
             node = ast.parse(expression.strip(), mode='eval')
-            
+
             # Evaluate the AST safely
             result = self._eval_ast_node(node.body, allowed_operators)
-            
+
             return {
                 "expression": expression,
                 "result": result,
                 "formatted": f"{expression} = {result}"
             }
-            
+
         except SyntaxError:
             return {
                 "error": f"Invalid mathematical expression: '{expression}'",
@@ -333,7 +332,7 @@ class ToolExecutor:
                 "expression": expression,
                 "hint": "Only basic arithmetic is supported: +, -, *, /, **"
             }
-    
+
     def _eval_ast_node(self, node: ast.AST, operators: dict) -> float:
         """
         Recursively evaluate an AST node safely.
@@ -354,30 +353,30 @@ class ToolExecutor:
                 return float(node.value)
             else:
                 raise ValueError(f"Only numbers are allowed, not {type(node.value).__name__}")
-        
+
         elif isinstance(node, ast.Num):
             # Older Python versions use ast.Num
             return float(node.n)
-        
+
         elif isinstance(node, ast.BinOp):
             # Binary operation (e.g., 2 + 3)
             op = operators.get(type(node.op))
             if op is None:
                 raise ValueError(f"Unsupported operator: {type(node.op).__name__}")
-            
+
             left = self._eval_ast_node(node.left, operators)
             right = self._eval_ast_node(node.right, operators)
             return op(left, right)
-        
+
         elif isinstance(node, ast.UnaryOp):
             # Unary operation (e.g., -5)
             op = operators.get(type(node.op))
             if op is None:
                 raise ValueError(f"Unsupported unary operator: {type(node.op).__name__}")
-            
+
             operand = self._eval_ast_node(node.operand, operators)
             return op(operand)
-        
+
         else:
             raise ValueError(
                 f"Unsupported expression type: {type(node).__name__}. "
