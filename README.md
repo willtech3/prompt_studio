@@ -48,7 +48,7 @@ prompt_studio/
 **Backend:**
 ```bash
 cd backend
-uv sync
+just sync
 cp .env.example .env  # Add OPENROUTER_API_KEY
 just migrate          # Optional: run migrations
 just seed             # Optional: load best practices

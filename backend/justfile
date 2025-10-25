@@ -8,6 +8,7 @@ start:
 # Stop the FastAPI development server
 stop:
     @pkill -f "uvicorn app.main:app" || echo "No server running"
+    @pids=$(lsof -t -iTCP:8000 -sTCP:LISTEN 2>/dev/null); if [ -n "$pids" ]; then kill $pids || true; fi
 
 # Run all tests with coverage
 test:
@@ -48,4 +49,3 @@ models:
 # Health check (requires API running)
 health:
     curl http://127.0.0.1:8000/health
-
