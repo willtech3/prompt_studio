@@ -444,14 +444,8 @@ async def stream_chat(
                                 }
                             )
 
-                        # Add a user nudge to drive the model back into reasoning then answer, which
-                        # increases likelihood of providers emitting a reasoning summary next.
-                        messages.append(
-                            {
-                                "role": "user",
-                                "content": "Please briefly explain how you used the results, then answer the original question in full.",
-                            }
-                        )
+                        # Continue without injecting additional prompts; providers that support
+                        # reasoning should emit summaries when `reasoning` is requested.
 
                         finalize_success = False
                         try:
