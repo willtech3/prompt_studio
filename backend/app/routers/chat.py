@@ -348,19 +348,31 @@ async def stream_chat(
                     message = response.get("choices", [{}])[0].get("message", {})
 
                     reasoning_content = None
-                    if (content_blocks := message.get("content")) and isinstance(
-                        content_blocks, list
-                    ):
-                        for block in content_blocks:
-                            if isinstance(block, dict):
-                                t = block.get("type")
-                                if t in {"thinking", "reasoning"}:
-                                    reasoning_content = (
-                                        block.get("reasoning")
-                                        or block.get("thinking")
-                                        or ""
-                                    )
-                                    break
+                    # Prefer explicit reasoning summary when present (e.g., GPT‑5)
+                    try:
+                        rc = message.get("reasoning") or message.get("reasoning_content")
+                        if isinstance(rc, dict):
+                            reasoning_content = rc.get("content") or rc.get("text") or rc.get("summary")
+                        elif isinstance(rc, str):
+                            reasoning_content = rc
+                    except Exception:
+                        pass
+
+                    if not reasoning_content:
+                        if (content_blocks := message.get("content")) and isinstance(
+                            content_blocks, list
+                        ):
+                            for block in content_blocks:
+                                if isinstance(block, dict):
+                                    t = block.get("type")
+                                    if t in {"thinking", "reasoning"}:
+                                        reasoning_content = (
+                                            block.get("reasoning")
+                                            or block.get("thinking")
+                                            or block.get("text")
+                                            or ""
+                                        )
+                                        break
 
                     if reasoning_content:
                         yield f"data: {json.dumps({'type': 'reasoning', 'content': reasoning_content})}\n\n"
