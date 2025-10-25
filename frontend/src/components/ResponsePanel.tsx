@@ -1,7 +1,7 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
-import React, { useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Copy, Save as SaveIcon, Settings2, Sparkles, Square } from 'lucide-react'
 import { usePromptStore } from '../store/promptStore'
 import { api } from '../services/api'
@@ -37,6 +37,7 @@ export function ResponsePanel() {
   const [runTrace, setRunTrace] = useState<RunTrace | null>(null)
   const [inspectorOpen, setInspectorOpen] = useState(false)
   const [focusToolId, setFocusToolId] = useState<string | undefined>()
+  const [activeSection, setActiveSection] = useState<'reasoning' | 'search' | 'response' | null>(null)
 
   const nowIso = () => new Date().toISOString()
   const parseArgs = (args: string): Record<string, unknown> | null => {
@@ -64,7 +65,7 @@ export function ResponsePanel() {
   // Clear tool traces when user presses Clear
   // resetTick increments in store.reset()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  React.useEffect(() => { setRunTrace(null); setInspectorOpen(false); setFocusToolId(undefined) }, [resetTick])
+  React.useEffect(() => { setRunTrace(null); setInspectorOpen(false); setFocusToolId(undefined); setActiveSection(null) }, [resetTick])
 
   const onGenerate = () => {
     if (isStreaming) return
@@ -78,6 +79,7 @@ export function ResponsePanel() {
     })
     addHistoryEntry()
     setIsStreaming(true)
+    setActiveSection(null)
 
     const interpolate = (text?: string | null) => {
       if (!text) return ''
@@ -125,6 +127,7 @@ export function ResponsePanel() {
             timestamp: nowIso(),
           }
           setRunTrace((prev) => prev ? { ...prev, reasoning: [...prev.reasoning, reasoningBlock] } : prev)
+          setActiveSection('reasoning')
         }
         else if (parsed.type === 'tool_calls') {
           // Model wants to call tools
@@ -137,6 +140,7 @@ export function ResponsePanel() {
             error: null,
           }))
           setRunTrace((prev) => prev ? { ...prev, tools: [...prev.tools, ...executions] } : prev)
+          setActiveSection('search')
         }
         else if (parsed.type === 'tool_executing') {
           // Tool is being executed
@@ -181,10 +185,14 @@ export function ResponsePanel() {
             })
             return { ...prev, tools }
           })
+          // After tool results, model typically reasons again
+          setActiveSection('reasoning')
         }
         else if (parsed.type === 'content') {
           // Regular content
           appendResponse(parsed.content)
+          // When answer begins, focus response section (collapse prior sections)
+          setActiveSection('response')
         }
         else if (parsed.type === 'done' || parsed.done) {
           // Stream complete
@@ -294,11 +302,11 @@ export function ResponsePanel() {
 
         {/* Reasoning blocks (shown before search results) */}
         {runTrace?.reasoning?.map((block, idx) => (
-          <ReasoningBlock key={block.id} content={block.content} index={idx} />
+          <ReasoningBlock key={block.id} content={block.content} index={idx} forceOpen={activeSection === 'reasoning' && idx === runTrace.reasoning.length - 1} />
         ))}
 
         {/* Search results preview (T3-style) */}
-        <SearchResultsInline run={runTrace} />
+        <SearchResultsInline run={runTrace} forceOpen={activeSection === 'search'} />
 
         {/* Response Content */}
         <div className="prose prose-sm dark:prose-invert max-w-none break-words" aria-live="polite">

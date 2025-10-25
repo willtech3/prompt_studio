@@ -1,13 +1,19 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Brain, ChevronDown, ChevronRight } from 'lucide-react'
 
 interface Props {
   content: string
   index: number
+  forceOpen?: boolean
 }
 
-export default function ReasoningBlock({ content, index }: Props) {
+export default function ReasoningBlock({ content, index, forceOpen }: Props) {
   const [open, setOpen] = useState(false)
+
+  // Keep local open state in sync with parent-driven focus
+  useEffect(() => {
+    if (typeof forceOpen === 'boolean') setOpen(forceOpen)
+  }, [forceOpen])
 
   if (!content || !content.trim()) return null
 

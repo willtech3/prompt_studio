@@ -84,10 +84,12 @@ class OpenRouterService:
         model: str,
         messages: list[dict[str, Any]],
         **params: Any,
-    ) -> AsyncGenerator[str]:
-        """Stream completion chunks from OpenRouter as raw text.
+    ) -> AsyncGenerator[Any]:
+        """Stream completion chunks from OpenRouter.
 
-        Yields text content deltas suitable for SSE `data: <chunk>\n\n` forwarding.
+        For simplicity, this yields either:
+          - plain string content chunks (normal text deltas)
+          - a tuple ("reasoning", text) when the provider emits a reasoning/thinking delta
         """
         client = await self._client_ctx()
 
@@ -132,9 +134,45 @@ class OpenRouterService:
                         import json as _json
 
                         obj = _json.loads(data)
-                        delta = obj.get("choices", [{}])[0].get("delta", {}).get("content")
-                        if delta:
-                            yield delta
+                        choice = (obj.get("choices") or [{}])[0]
+                        delta = choice.get("delta", {}) if isinstance(choice.get("delta", {}), dict) else {}
+                        message = choice.get("message", {}) if isinstance(choice.get("message", {}), dict) else {}
+
+                        # Try to surface streamed reasoning when available (provider-specific)
+                        reasoning_text = None
+                        r = delta.get("reasoning")
+                        if isinstance(r, dict):
+                            reasoning_text = r.get("content") or r.get("text")
+                        elif isinstance(r, str):
+                            reasoning_text = r
+
+                        # Some providers use "thinking"
+                        if not reasoning_text:
+                            thinking = delta.get("thinking")
+                            if isinstance(thinking, dict):
+                                reasoning_text = thinking.get("content") or thinking.get("text")
+                            elif isinstance(thinking, str):
+                                reasoning_text = thinking
+
+                        if reasoning_text:
+                            # Yield typed event for upstream router to forward as SSE
+                            yield ("reasoning", reasoning_text)
+                            continue
+
+                        # Some providers emit a reasoning summary only at final message
+                        if message:
+                            msg_reasoning = message.get("reasoning") or message.get("reasoning_content")
+                            if isinstance(msg_reasoning, dict):
+                                msg_text = msg_reasoning.get("content") or msg_reasoning.get("text")
+                                if msg_text:
+                                    yield ("reasoning", msg_text)
+                                    # do not continue; a final message may also include content below
+                            elif isinstance(msg_reasoning, str):
+                                yield ("reasoning", msg_reasoning)
+
+                        content_text = delta.get("content") or message.get("content")
+                        if content_text:
+                            yield content_text
                     except Exception:
                         # Minimal error handling for MVP
                         # Yield raw to avoid hiding useful info

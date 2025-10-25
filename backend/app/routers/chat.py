@@ -352,12 +352,15 @@ async def stream_chat(
                         content_blocks, list
                     ):
                         for block in content_blocks:
-                            if (
-                                isinstance(block, dict)
-                                and block.get("type") == "thinking"
-                            ):
-                                reasoning_content = block.get("thinking", "")
-                                break
+                            if isinstance(block, dict):
+                                t = block.get("type")
+                                if t in {"thinking", "reasoning"}:
+                                    reasoning_content = (
+                                        block.get("reasoning")
+                                        or block.get("thinking")
+                                        or ""
+                                    )
+                                    break
 
                     if reasoning_content:
                         yield f"data: {json.dumps({'type': 'reasoning', 'content': reasoning_content})}\n\n"
@@ -465,9 +468,15 @@ async def stream_chat(
                                 async for chunk in svc.stream_completion(
                                     model=model, messages=messages, **stream_params
                                 ):
-                                    final_content_parts.append(chunk)
-                                    yield f"data: {json.dumps({'type': 'content', 'content': chunk})}\n\n"
-                                    sent_any_content = True
+                                    # Chunk can be a plain string (content) or a ("reasoning", text) tuple
+                                    if isinstance(chunk, tuple) and len(chunk) == 2 and chunk[0] == "reasoning":
+                                        _, text = chunk
+                                        yield f"data: {json.dumps({'type': 'reasoning', 'content': text})}\n\n"
+                                    else:
+                                        text = chunk if isinstance(chunk, str) else str(chunk)
+                                        final_content_parts.append(text)
+                                        yield f"data: {json.dumps({'type': 'content', 'content': text})}\n\n"
+                                        sent_any_content = True
 
                                 if final_content_parts:
                                     break
@@ -514,8 +523,13 @@ async def stream_chat(
                 async for chunk in svc.stream_completion(
                     model=model, messages=messages, **params
                 ):
-                    yield f"data: {json.dumps({'type': 'content', 'content': chunk})}\n\n"
-                    sent_any_content = True
+                    if isinstance(chunk, tuple) and len(chunk) == 2 and chunk[0] == "reasoning":
+                        _, text = chunk
+                        yield f"data: {json.dumps({'type': 'reasoning', 'content': text})}\n\n"
+                    else:
+                        text = chunk if isinstance(chunk, str) else str(chunk)
+                        yield f"data: {json.dumps({'type': 'content', 'content': text})}\n\n"
+                        sent_any_content = True
 
             yield f"data: {json.dumps({'type': 'done', 'done': True})}\n\n"
         except Exception as e:

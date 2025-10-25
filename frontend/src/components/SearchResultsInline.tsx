@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { RunTrace } from '../types/models'
 import { Globe, ChevronDown, ChevronRight } from 'lucide-react'
 
-interface Props { run?: RunTrace | null }
+interface Props { run?: RunTrace | null; forceOpen?: boolean }
 
 function faviconUrl(u?: string) {
   if (!u) return ''
@@ -12,7 +12,7 @@ function faviconUrl(u?: string) {
   } catch { return '' }
 }
 
-export default function SearchResultsInline({ run }: Props) {
+export default function SearchResultsInline({ run, forceOpen }: Props) {
   const links = useMemo(() => (run?.tools || []).flatMap(t => t.links || []), [run?.tools])
   const items = useMemo(() => {
     const map = new Map<string, { title: string; url: string; source?: string; snippet?: string }>()
@@ -30,6 +30,9 @@ export default function SearchResultsInline({ run }: Props) {
   }, [links])
 
   const [open, setOpen] = useState(true)
+  useEffect(() => {
+    if (typeof forceOpen === 'boolean') setOpen(forceOpen)
+  }, [forceOpen])
   if (!items.length) return null
   return (
     <section className="mb-3">
