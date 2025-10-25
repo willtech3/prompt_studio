@@ -31,7 +31,11 @@ export class APIClient {
     if (typeof request.temperature === 'number') params.set('temperature', String(request.temperature))
     if (typeof request.topP === 'number') params.set('top_p', String(request.topP))
     if (request.maxTokens) params.set('max_tokens', String(request.maxTokens))
-    if (request.reasoningEffort && request.reasoningEffort !== 'auto') params.set('reasoning_effort', request.reasoningEffort)
+    if (request.reasoningEffort && request.reasoningEffort !== 'auto') {
+      params.set('reasoning_effort', request.reasoningEffort)
+      // Hint server to include reasoning blocks when supported
+      params.set('include_reasoning', 'true')
+    }
     if (request.topK != null) params.set('top_k', String(request.topK))
     if (request.frequencyPenalty != null) params.set('frequency_penalty', String(request.frequencyPenalty))
     if (request.presencePenalty != null) params.set('presence_penalty', String(request.presencePenalty))

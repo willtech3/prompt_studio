@@ -233,6 +233,9 @@ async def stream_chat(
             params["max_tokens"] = effective_max_tokens
         if reasoning_effort and reasoning_effort.lower() != "auto":
             params["reasoning"] = {"effort": reasoning_effort.lower()}
+            # Some providers (e.g., GPT‑5 via OpenRouter) require this flag to include
+            # visible reasoning summaries, especially when tools are used
+            params["include_reasoning"] = True
 
         if top_k is not None:
             params["top_k"] = top_k
@@ -441,10 +444,12 @@ async def stream_chat(
                                 }
                             )
 
+                        # Add a user nudge to drive the model back into reasoning then answer, which
+                        # increases likelihood of providers emitting a reasoning summary next.
                         messages.append(
                             {
                                 "role": "user",
-                                "content": "Please use the tool results above to answer my original question.",
+                                "content": "Please briefly explain how you used the results, then answer the original question in full.",
                             }
                         )
 
