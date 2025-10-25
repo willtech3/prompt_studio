@@ -475,6 +475,9 @@ async def stream_chat(
                         if not finalize_success:
                             try:
                                 stream_params = params.copy()
+                                # Ensure the finalize streaming call does not trigger more tools
+                                stream_params["tools"] = parsed_tool_schemas
+                                stream_params["tool_choice"] = "none"
                                 final_content_parts = []
                                 async for chunk in svc.stream_completion(
                                     model=model, messages=messages, **stream_params

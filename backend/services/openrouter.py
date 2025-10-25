@@ -157,7 +157,8 @@ class OpenRouterService:
                         if reasoning_text:
                             # Yield typed event for upstream router to forward as SSE
                             yield ("reasoning", reasoning_text)
-                            continue
+                            # Do not `continue`; providers sometimes include both reasoning delta and a
+                            # content delta in the same SSE frame. Allow content to pass through as well.
 
                         # Some providers emit a reasoning summary only at final message
                         if message:

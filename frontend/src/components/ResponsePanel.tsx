@@ -210,7 +210,7 @@ export function ResponsePanel() {
         }
         else if (parsed.type === 'content') {
           // Regular content
-          appendResponse(parsed.content)
+          appendResponse(String(parsed.content ?? ''))
           // When answer begins, focus response section (collapse prior sections)
           setActiveSection('response')
           lastEventTypeRef.current = 'content'
