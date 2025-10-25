@@ -38,6 +38,7 @@ export function ResponsePanel() {
   const [inspectorOpen, setInspectorOpen] = useState(false)
   const [focusToolId, setFocusToolId] = useState<string | undefined>()
   const [activeSection, setActiveSection] = useState<'reasoning' | 'search' | 'response' | null>(null)
+  const lastEventTypeRef = useRef<'reasoning' | 'tool' | 'content' | null>(null)
 
   const nowIso = () => new Date().toISOString()
   const parseArgs = (args: string): Record<string, unknown> | null => {
@@ -65,7 +66,7 @@ export function ResponsePanel() {
   // Clear tool traces when user presses Clear
   // resetTick increments in store.reset()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  React.useEffect(() => { setRunTrace(null); setInspectorOpen(false); setFocusToolId(undefined); setActiveSection(null) }, [resetTick])
+  React.useEffect(() => { setRunTrace(null); setInspectorOpen(false); setFocusToolId(undefined); setActiveSection(null); lastEventTypeRef.current = null }, [resetTick])
 
   const onGenerate = () => {
     if (isStreaming) return
@@ -121,13 +122,28 @@ export function ResponsePanel() {
         // Handle different message types
         if (parsed.type === 'reasoning') {
           // Model provided reasoning/thinking content
-          const reasoningBlock: ReasoningBlockType = {
-            id: `reasoning-${Date.now()}`,
-            content: parsed.content,
-            timestamp: nowIso(),
-          }
-          setRunTrace((prev) => prev ? { ...prev, reasoning: [...prev.reasoning, reasoningBlock] } : prev)
+          const text = String(parsed.content ?? '')
+          setRunTrace((prev) => {
+            if (!prev) return prev
+            const hasPrevBlock = (prev.reasoning && prev.reasoning.length > 0) || false
+            const shouldAppend = hasPrevBlock && lastEventTypeRef.current === 'reasoning'
+            if (shouldAppend) {
+              const next = { ...prev }
+              const lastIdx = next.reasoning.length - 1
+              const last = next.reasoning[lastIdx]
+              next.reasoning = [...next.reasoning]
+              next.reasoning[lastIdx] = { ...last, content: (last.content || '') + text }
+              return next
+            }
+            const reasoningBlock: ReasoningBlockType = {
+              id: `reasoning-${Date.now()}`,
+              content: text,
+              timestamp: nowIso(),
+            }
+            return { ...prev, reasoning: [...prev.reasoning, reasoningBlock] }
+          })
           setActiveSection('reasoning')
+          lastEventTypeRef.current = 'reasoning'
         }
         else if (parsed.type === 'tool_calls') {
           // Model wants to call tools
@@ -140,7 +156,10 @@ export function ResponsePanel() {
             error: null,
           }))
           setRunTrace((prev) => prev ? { ...prev, tools: [...prev.tools, ...executions] } : prev)
-          setActiveSection('search')
+          // Keep reasoning open initially; only open Search after first tool_result arrives
+          // so user sees thinking start before results are summarized.
+          // We'll switch focus on tool_result below.
+          lastEventTypeRef.current = 'tool'
         }
         else if (parsed.type === 'tool_executing') {
           // Tool is being executed
@@ -185,14 +204,16 @@ export function ResponsePanel() {
             })
             return { ...prev, tools }
           })
-          // After tool results, model typically reasons again
-          setActiveSection('reasoning')
+          // After first tool result, bring Search into focus, then hand back to Reasoning on next reasoning chunk
+          setActiveSection('search')
+          lastEventTypeRef.current = 'tool'
         }
         else if (parsed.type === 'content') {
           // Regular content
           appendResponse(parsed.content)
           // When answer begins, focus response section (collapse prior sections)
           setActiveSection('response')
+          lastEventTypeRef.current = 'content'
         }
         else if (parsed.type === 'done' || parsed.done) {
           // Stream complete
@@ -302,7 +323,13 @@ export function ResponsePanel() {
 
         {/* Reasoning blocks (shown before search results) */}
         {runTrace?.reasoning?.map((block, idx) => (
-          <ReasoningBlock key={block.id} content={block.content} index={idx} forceOpen={activeSection === 'reasoning' && idx === runTrace.reasoning.length - 1} />
+          <ReasoningBlock
+            key={block.id}
+            content={block.content}
+            index={idx}
+            forceOpen={activeSection === 'reasoning' && idx === runTrace.reasoning.length - 1}
+            showSpinner={isStreaming && activeSection === 'reasoning' && idx === runTrace.reasoning.length - 1}
+          />
         ))}
 
         {/* Search results preview (T3-style) */}

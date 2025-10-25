@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
-import { Brain, ChevronDown, ChevronRight } from 'lucide-react'
+import { Brain, ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
 
 interface Props {
   content: string
   index: number
   forceOpen?: boolean
+  showSpinner?: boolean
 }
 
-export default function ReasoningBlock({ content, index, forceOpen }: Props) {
+export default function ReasoningBlock({ content, index, forceOpen, showSpinner }: Props) {
   const [open, setOpen] = useState(false)
 
   // Keep local open state in sync with parent-driven focus
@@ -25,6 +26,9 @@ export default function ReasoningBlock({ content, index, forceOpen }: Props) {
       >
         <Brain className="h-4 w-4" />
         <span className="font-medium">Reasoning</span>
+        {showSpinner && (
+          <Loader2 className="h-3.5 w-3.5 ml-1 animate-spin opacity-70" />
+        )}
         {open ? <ChevronDown className="h-3.5 w-3.5 opacity-70" /> : <ChevronRight className="h-3.5 w-3.5 opacity-70" />}
       </button>
       {open && (
