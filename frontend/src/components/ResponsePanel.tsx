@@ -40,6 +40,9 @@ export function ResponsePanel() {
   const [warning, setWarning] = useState<string | null>(null)
   const [searchOpen, setSearchOpen] = useState<boolean>(true)
   const [reasoningPhase, setReasoningPhase] = useState<number>(0)
+  const nextReasoningPhaseRef = useRef<number>(0)
+  const pendingOpenSearchRef = useRef<boolean>(false)
+  const reasoningSilenceTimerRef = useRef<number | null>(null)
   const [reasoningOpenMap, setReasoningOpenMap] = useState<Record<number, boolean>>({})
   const [reasoningTexts, setReasoningTexts] = useState<Record<number, string>>({})
 
@@ -77,6 +80,10 @@ export function ResponsePanel() {
     setWarning(null)
     setSearchOpen(true)
     setReasoningPhase(0)
+    nextReasoningPhaseRef.current = 0
+    pendingOpenSearchRef.current = false
+    if (reasoningSilenceTimerRef.current) window.clearTimeout(reasoningSilenceTimerRef.current)
+    reasoningSilenceTimerRef.current = null
     setReasoningOpenMap({})
     setReasoningTexts({})
     setRunTrace({
@@ -130,9 +137,20 @@ export function ResponsePanel() {
         if (parsed.type === 'reasoning') {
           const chunk = typeof parsed.content === 'string' ? parsed.content : ''
           if (chunk) {
-            setReasoningTexts((prev) => ({ ...prev, [reasoningPhase]: (prev[reasoningPhase] || '') + chunk }))
+            const phase = nextReasoningPhaseRef.current
+            if (phase !== reasoningPhase) setReasoningPhase(phase)
+            setReasoningTexts((prev) => ({ ...prev, [phase]: (prev[phase] || '') + chunk }))
             // Open the reasoning panel for this phase on first token arrival
-            setReasoningOpenMap((prev) => (prev[reasoningPhase] ? prev : { ...prev, [reasoningPhase]: true }))
+            setReasoningOpenMap((prev) => (prev[phase] ? prev : { ...prev, [phase]: true }))
+            // If a search is pending, only open it after a brief silence in reasoning
+            if (pendingOpenSearchRef.current) {
+              if (reasoningSilenceTimerRef.current) window.clearTimeout(reasoningSilenceTimerRef.current)
+              reasoningSilenceTimerRef.current = window.setTimeout(() => {
+                setReasoningOpenMap((prev) => ({ ...prev, [phase]: false }))
+                setSearchOpen(true)
+                pendingOpenSearchRef.current = false
+              }, 350)
+            }
           }
         }
         else if (parsed.type === 'tool_calls') {
@@ -148,17 +166,9 @@ export function ResponsePanel() {
           setRunTrace((prev) => prev ? { ...prev, tools: [...prev.tools, ...executions] } : prev)
         }
         else if (parsed.type === 'tool_executing') {
-          // Tool is being executed
-          setReasoningPhase(1)
-          // Collapse any open reasoning blocks when a tool starts to keep focus on search/results
-          setReasoningOpenMap((prev) => {
-            const next: Record<number, boolean> = { ...prev }
-            Object.keys(next).forEach((k) => { next[Number(k)] = false })
-            return next
-          })
-          // Open search panel while search is running
+          // Tool is being executed — queue search panel until reasoning finishes (brief silence)
           if ((parsed.category === 'search') || (typeof parsed.name === 'string' && parsed.name.toLowerCase().includes('search'))) {
-            setSearchOpen(true)
+            pendingOpenSearchRef.current = true
           }
           setRunTrace((prev) => {
             if (!prev) return prev
@@ -209,32 +219,31 @@ export function ResponsePanel() {
             })
             return { ...prev, tools }
           })
-          // Collapse search panel after it completes
+          // Search finished: close search panel and prepare for next reasoning phase
           if ((parsed.category === 'search') || (typeof parsed.name === 'string' && parsed.name.toLowerCase().includes('search'))) {
             setSearchOpen(false)
+            const nextPhase = Math.max(0, ...Object.keys(reasoningTexts).map(Number)) + 1
+            nextReasoningPhaseRef.current = nextPhase
           }
         }
         else if (parsed.type === 'content') {
           // Regular content
           appendResponse(parsed.content)
-          // If we are in a post-tool reasoning phase and content started, collapse that reasoning block
-          setReasoningOpenMap((prev) => {
-            if (reasoningPhase > 0 && prev[reasoningPhase]) {
-              return { ...prev, [reasoningPhase]: false }
-            }
-            return prev
-          })
+          // Content implies reasoning has ended for current phase
+          setReasoningOpenMap((prev) => ({ ...prev, [reasoningPhase]: false }))
+          pendingOpenSearchRef.current = false
+          if (reasoningSilenceTimerRef.current) window.clearTimeout(reasoningSilenceTimerRef.current)
+          reasoningSilenceTimerRef.current = null
         }
         else if (parsed.type === 'done' || parsed.done) {
           // Stream complete
           setIsStreaming(false)
           setRunTrace((prev) => prev ? { ...prev, endedAt: nowIso() } : prev)
-          // Collapse any currently open reasoning blocks on completion
-          setReasoningOpenMap((prev) => {
-            const next: Record<number, boolean> = { ...prev }
-            Object.keys(next).forEach((k) => { next[Number(k)] = false })
-            return next
-          })
+          // Collapse any open reasoning blocks on completion (keep visible)
+          setReasoningOpenMap((prev) => Object.fromEntries(Object.keys(prev).map((k) => [Number(k), false])) as Record<number, boolean>)
+          pendingOpenSearchRef.current = false
+          if (reasoningSilenceTimerRef.current) window.clearTimeout(reasoningSilenceTimerRef.current)
+          reasoningSilenceTimerRef.current = null
           if (currentStream.current) {
             api.stopStream(currentStream.current)
             currentStream.current = null
