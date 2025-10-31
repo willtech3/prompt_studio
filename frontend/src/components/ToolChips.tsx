@@ -32,6 +32,8 @@ export function ToolChips({ run, onOpen }: Props) {
   if (!run || !run.tools?.length) return null
   const byName: Record<string, ToolExecutionTrace[]> = {}
   for (const t of run.tools) {
+    // Hide utility tools from chips per visibility metadata when available
+    if ((t.visibility === 'hidden') || (t.category === 'utility' && t.visibility !== 'primary')) continue
     byName[t.name] ||= []
     byName[t.name].push(t)
   }

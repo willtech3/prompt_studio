@@ -44,6 +44,8 @@ export interface ToolExecutionTrace {
   links?: ToolLink[]
   outputRaw?: unknown
   error?: { message: string; code?: string } | null
+  category?: 'search' | 'utility' | 'other'
+  visibility?: 'primary' | 'secondary' | 'hidden'
 }
 
 export interface ReasoningBlock {

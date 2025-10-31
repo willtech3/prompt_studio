@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config.db import create_all, get_session
+from app.core.config import is_tool_loop_v2_enabled
 from models.model_config import ModelConfig
 from services.openrouter import OpenRouterService
 from services.tool_executor import ToolExecutor
@@ -103,6 +104,24 @@ def parse_time_constraints(text: str) -> dict | None:
     return None
 
 
+def _tool_metadata(name: str) -> dict:
+    """Return metadata for tool visibility and categorization.
+
+    - search_web: category=search, visibility=primary
+    - get_current_time, calculate: category=utility, visibility=hidden
+    - default: category=other, visibility=secondary
+    """
+    try:
+        n = (name or "").lower()
+        if n == "search_web":
+            return {"category": "search", "visibility": "primary"}
+        if n in {"get_current_time", "calculate"}:
+            return {"category": "utility", "visibility": "hidden"}
+    except Exception:
+        pass
+    return {"category": "other", "visibility": "secondary"}
+
+
 @router.get("/stream")
 async def stream_chat(
     model: str = Query(..., description="Model ID to use"),
@@ -159,9 +178,11 @@ async def stream_chat(
 ):
     async def generate():
         sent_any_content = False
+        tool_loop_v2 = is_tool_loop_v2_enabled()
 
         if not os.getenv("OPENROUTER_API_KEY"):
-            yield "data: Set OPENROUTER_API_KEY to enable streaming.\n\n"
+            yield f"data: {json.dumps({'type': 'warning', 'message': 'Set OPENROUTER_API_KEY to enable streaming.'})}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'done': True})}\n\n"
             return
 
         effective_max_tokens = max_tokens
@@ -283,6 +304,12 @@ async def stream_chat(
                 params["logit_bias"] = json.loads(logit_bias)
 
         try:
+            # Per-turn search dedupe/clamp (V2 only)
+            search_cache: dict[str, dict] = {}
+            unique_search_count = 0
+            search_clamp_limit = 6
+            clamp_warning_sent = False
+
             if parsed_tool_schemas and tool_executor:
                 iteration = 0
                 limit = max_tool_calls or 20
@@ -342,25 +369,59 @@ async def stream_chat(
                         }
                         should_force_tools_first_turn = True
 
+                    # Provider guardrails
+                    provider_prefix = _provider_id_from_model(model)
+                    if provider_prefix in {"anthropic", "xai"}:
+                        call_params["parallel_tool_calls"] = False
+
                     response = await svc.completion(
                         model=model, messages=messages, **call_params
                     )
                     message = response.get("choices", [{}])[0].get("message", {})
 
-                    reasoning_content = None
-                    if (content_blocks := message.get("content")) and isinstance(
-                        content_blocks, list
-                    ):
+                    # Attempt to surface model reasoning content when provided
+                    reasoning_parts: list[str] = []
+                    # Some providers expose top-level reasoning fields
+                    for key in ("reasoning", "thinking"):
+                        try:
+                            v = message.get(key)
+                            if isinstance(v, str) and v.strip():
+                                reasoning_parts.append(v)
+                        except Exception:
+                            pass
+                    # And/or content blocks with various shapes
+                    content_blocks = message.get("content")
+                    if isinstance(content_blocks, list):
                         for block in content_blocks:
-                            if (
-                                isinstance(block, dict)
-                                and block.get("type") == "thinking"
-                            ):
-                                reasoning_content = block.get("thinking", "")
-                                break
-
-                    if reasoning_content:
-                        yield f"data: {json.dumps({'type': 'reasoning', 'content': reasoning_content})}\n\n"
+                            if not isinstance(block, dict):
+                                continue
+                            btype = (block.get("type") or "").lower()
+                            if btype in {"thinking", "reasoning"}:
+                                text = (
+                                    block.get("thinking")
+                                    or block.get("reasoning")
+                                    or block.get("content")
+                                    or block.get("text")
+                                    or ""
+                                )
+                                if isinstance(text, str) and text.strip():
+                                    reasoning_parts.append(text)
+                    if reasoning_parts:
+                        # Emit reasoning in small chunks to provide a streaming-like UX
+                        try:
+                            import asyncio as _asyncio
+                            text = "\n".join(reasoning_parts)
+                            # Split on double newlines or sentence boundaries as best-effort
+                            import re as _re
+                            segments = [s for s in _re.split(r"(\n\n+|(?<=[\.!?])\s+)", text) if s and not s.isspace()]
+                            if not segments:
+                                segments = [text]
+                            for seg in segments:
+                                yield f"data: {json.dumps({'type': 'reasoning', 'content': seg})}\n\n"
+                                # cooperative yield; no artificial delay to avoid slowing UX
+                                await _asyncio.sleep(0)
+                        except Exception:
+                            yield f"data: {json.dumps({'type': 'reasoning', 'content': '\n'.join(reasoning_parts)})}\n\n"
 
                     if tool_calls := message.get("tool_calls"):
                         tool_call_info = []
@@ -382,7 +443,8 @@ async def stream_chat(
                             func_name = tool_call["function"]["name"]
                             func_args_str = tool_call["function"]["arguments"]
 
-                            yield f"data: {json.dumps({'type': 'tool_executing', 'id': tool_call_id, 'name': func_name})}\n\n"
+                            meta = _tool_metadata(func_name)
+                            yield f"data: {json.dumps({'type': 'tool_executing', 'id': tool_call_id, 'name': func_name, 'category': meta.get('category'), 'visibility': meta.get('visibility')})}\n\n"
 
                             try:
                                 func_args = json.loads(func_args_str)
@@ -403,9 +465,34 @@ async def stream_chat(
                                 except Exception:
                                     pass
 
-                            result = await tool_executor.execute(func_name, func_args)
+                            # V2: dedupe/clamp for search_web
+                            if tool_loop_v2 and func_name == "search_web":
+                                try:
+                                    q = (func_args.get("query") or "").strip().lower()
+                                    k_after = str(func_args.get("after") or "").strip()
+                                    k_before = str(func_args.get("before") or "").strip()
+                                    k_hint = str(func_args.get("time_hint") or "").strip().lower()
+                                    key = json.dumps({"q": q, "after": k_after, "before": k_before, "hint": k_hint}, sort_keys=True)
 
-                            yield f"data: {json.dumps({'type': 'tool_result', 'id': tool_call_id, 'name': func_name, 'result': result})}\n\n"
+                                    if key in search_cache:
+                                        result = search_cache[key]
+                                    else:
+                                        if unique_search_count >= search_clamp_limit:
+                                            if not clamp_warning_sent:
+                                                clamp_warning_sent = True
+                                                yield f"data: {json.dumps({'type': 'warning', 'message': f'Trimmed tool calls to {search_clamp_limit}', 'code': 'TOOL_CLAMP'})}\n\n"
+                                            result = {"success": False, "error": f"Search trimmed by clamp ({search_clamp_limit})"}
+                                        else:
+                                            result = await tool_executor.execute(func_name, func_args)
+                                            if result and result.get("success"):
+                                                search_cache[key] = result
+                                                unique_search_count += 1
+                                except Exception:
+                                    result = await tool_executor.execute(func_name, func_args)
+                            else:
+                                result = await tool_executor.execute(func_name, func_args)
+
+                            yield f"data: {json.dumps({'type': 'tool_result', 'id': tool_call_id, 'name': func_name, 'result': result, 'category': meta.get('category'), 'visibility': meta.get('visibility')})}\n\n"
 
                             if result.get("success"):
                                 tool_content = json.dumps(result.get("result", {}))

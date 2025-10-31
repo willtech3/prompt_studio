@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import type { RunTrace } from '../types/models'
 import { Globe, ChevronDown, ChevronRight } from 'lucide-react'
 
-interface Props { run?: RunTrace | null }
+interface Props { run?: RunTrace | null; initialOpen?: boolean; isRunning?: boolean }
 
 function faviconUrl(u?: string) {
   if (!u) return ''
@@ -12,7 +12,7 @@ function faviconUrl(u?: string) {
   } catch { return '' }
 }
 
-export default function SearchResultsInline({ run }: Props) {
+export default function SearchResultsInline({ run, initialOpen = true, isRunning = false }: Props) {
   const links = useMemo(() => (run?.tools || []).flatMap(t => t.links || []), [run?.tools])
   const items = useMemo(() => {
     const map = new Map<string, { title: string; url: string; source?: string; snippet?: string }>()
@@ -29,13 +29,19 @@ export default function SearchResultsInline({ run }: Props) {
     return Array.from(map.values())
   }, [links])
 
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(initialOpen)
   if (!items.length) return null
   return (
     <section className="mb-3">
       <button onClick={() => setOpen(o => !o)} className="w-full text-left text-sm flex items-center gap-2 text-gray-700 dark:text-gray-200">
         <Globe className="h-4 w-4" />
         <span className="font-medium">Searched the web</span>
+        {isRunning && (
+          <span className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-300">
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-blue-500 animate-pulse" />
+            searching…
+          </span>
+        )}
         {open ? <ChevronDown className="h-3.5 w-3.5 opacity-70"/> : <ChevronRight className="h-3.5 w-3.5 opacity-70"/>}
       </button>
       {open && (

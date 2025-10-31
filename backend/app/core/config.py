@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 
 from dotenv import load_dotenv
 
@@ -28,3 +29,11 @@ def load_env_from_project_root() -> None:
     except Exception:
         # Keep minimal: ignore if path resolution fails
         pass
+
+
+def is_tool_loop_v2_enabled() -> bool:
+    """Feature flag for the refactored tool loop (TOOL_LOOP_V2).
+
+    Default: False. Set env TOOL_LOOP_V2=true to enable.
+    """
+    return str(os.getenv("TOOL_LOOP_V2", "false")).strip().lower() in {"1", "true", "yes", "on"}
