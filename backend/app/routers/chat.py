@@ -374,78 +374,66 @@ async def stream_chat(
                     if provider_prefix in {"anthropic", "xai"}:
                         call_params["parallel_tool_calls"] = False
 
-                    response = await svc.completion(
-                        model=model, messages=messages, **call_params
-                    )
-                    message = response.get("choices", [{}])[0].get("message", {})
-
-                    # Attempt to surface model reasoning content when provided
-                    reasoning_parts: list[str] = []
-                    # Some providers expose top-level reasoning fields
-                    for key in ("reasoning", "thinking"):
-                        try:
-                            v = message.get(key)
-                            if isinstance(v, str) and v.strip():
-                                reasoning_parts.append(v)
-                        except Exception:
-                            pass
-                    # And/or content blocks with various shapes
-                    content_blocks = message.get("content")
-                    if isinstance(content_blocks, list):
-                        for block in content_blocks:
-                            if not isinstance(block, dict):
+                    if tool_loop_v2:
+                        # Streaming path: surface reasoning and tool_call deltas in real time
+                        tool_builders: dict[int, dict] = {}
+                        assistant_tool_msg = {"role": "assistant", "tool_calls": []}
+                        completed_call: dict | None = None
+                        # Stream events until we either see a completed tool call or the content finishes
+                        async for ev in svc.stream_events(model=model, messages=messages, **call_params):
+                            et = ev.get("type")
+                            if et == "reasoning":
+                                yield f"data: {json.dumps({'type': 'reasoning', 'content': ev.get('content', '')})}\n\n"
                                 continue
-                            btype = (block.get("type") or "").lower()
-                            if btype in {"thinking", "reasoning"}:
-                                text = (
-                                    block.get("thinking")
-                                    or block.get("reasoning")
-                                    or block.get("content")
-                                    or block.get("text")
-                                    or ""
-                                )
-                                if isinstance(text, str) and text.strip():
-                                    reasoning_parts.append(text)
-                    if reasoning_parts:
-                        # Emit reasoning in small chunks to provide a streaming-like UX
-                        try:
-                            import asyncio as _asyncio
-                            text = "\n".join(reasoning_parts)
-                            # Split on double newlines or sentence boundaries as best-effort
-                            import re as _re
-                            segments = [s for s in _re.split(r"(\n\n+|(?<=[\.!?])\s+)", text) if s and not s.isspace()]
-                            if not segments:
-                                segments = [text]
-                            for seg in segments:
-                                yield f"data: {json.dumps({'type': 'reasoning', 'content': seg})}\n\n"
-                                # cooperative yield; no artificial delay to avoid slowing UX
-                                await _asyncio.sleep(0)
-                        except Exception:
-                            yield f"data: {json.dumps({'type': 'reasoning', 'content': '\n'.join(reasoning_parts)})}\n\n"
+                            if et == "tool_call_delta":
+                                idx = int(ev.get("index") or 0)
+                                b = tool_builders.get(idx) or {"id": ev.get("id"), "name": None, "arguments": ""}
+                                if ev.get("id") and not b.get("id"):
+                                    b["id"] = ev.get("id")
+                                if ev.get("name"):
+                                    b["name"] = ev.get("name")
+                                if isinstance(ev.get("arguments"), str):
+                                    b["arguments"] = (b.get("arguments") or "") + ev.get("arguments")
+                                tool_builders[idx] = b
+                                # Check if arguments parse as JSON and name exists → consider call complete
+                                try:
+                                    if b.get("name") and b.get("arguments"):
+                                        json.loads(b["arguments"])  # will raise until complete
+                                        call_id = b.get("id") or f"call_{idx}_{iteration}"
+                                        completed_call = {
+                                            "id": call_id,
+                                            "name": b["name"],
+                                            "arguments": b["arguments"],
+                                        }
+                                        break
+                                except Exception:
+                                    pass
+                                continue
+                            if et == "content_delta":
+                                # Stream normal content when no tools are triggered
+                                yield f"data: {json.dumps({'type': 'content', 'content': ev.get('content', '')})}\n\n"
+                                sent_any_content = True
+                                continue
+                            if et == "done":
+                                break
 
-                    if tool_calls := message.get("tool_calls"):
-                        tool_call_info = []
-                        for tc in tool_calls:
-                            tool_call_info.append(
+                        if completed_call is not None:
+                            # Emit tool_calls for the first completed call and start execution
+                            yield f"data: {json.dumps({'type': 'tool_calls', 'calls': [completed_call]})}\n\n"
+                            assistant_tool_msg["tool_calls"].append(
                                 {
-                                    "id": tc.get("id", "unknown"),
-                                    "name": tc["function"]["name"],
-                                    "arguments": tc["function"]["arguments"],
+                                    "id": completed_call["id"],
+                                    "type": "function",
+                                    "function": {
+                                        "name": completed_call["name"],
+                                        "arguments": completed_call["arguments"],
+                                    },
                                 }
                             )
+                            messages.append(assistant_tool_msg)
 
-                        yield f"data: {json.dumps({'type': 'tool_calls', 'calls': tool_call_info})}\n\n"
-
-                        messages.append(message)
-
-                        for tool_call in tool_calls:
-                            tool_call_id = tool_call.get("id", "unknown")
-                            func_name = tool_call["function"]["name"]
-                            func_args_str = tool_call["function"]["arguments"]
-
-                            meta = _tool_metadata(func_name)
-                            yield f"data: {json.dumps({'type': 'tool_executing', 'id': tool_call_id, 'name': func_name, 'category': meta.get('category'), 'visibility': meta.get('visibility')})}\n\n"
-
+                            func_name = completed_call["name"]
+                            func_args_str = completed_call["arguments"]
                             try:
                                 func_args = json.loads(func_args_str)
                             except json.JSONDecodeError:
@@ -453,9 +441,7 @@ async def stream_chat(
 
                             if func_name == "search_web":
                                 try:
-                                    hint = parse_time_constraints(
-                                        f"{system or ''} \n {prompt}"
-                                    )
+                                    hint = parse_time_constraints(f"{system or ''} \n {prompt}")
                                     if hint:
                                         for k in ("time_hint", "after", "before"):
                                             if k not in func_args:
@@ -465,8 +451,11 @@ async def stream_chat(
                                 except Exception:
                                     pass
 
+                            meta = _tool_metadata(func_name)
+                            yield f"data: {json.dumps({'type': 'tool_executing', 'id': completed_call['id'], 'name': func_name, 'category': meta.get('category'), 'visibility': meta.get('visibility')})}\n\n"
+
                             # V2: dedupe/clamp for search_web
-                            if tool_loop_v2 and func_name == "search_web":
+                            if func_name == "search_web":
                                 try:
                                     q = (func_args.get("query") or "").strip().lower()
                                     k_after = str(func_args.get("after") or "").strip()
@@ -492,105 +481,268 @@ async def stream_chat(
                             else:
                                 result = await tool_executor.execute(func_name, func_args)
 
-                            yield f"data: {json.dumps({'type': 'tool_result', 'id': tool_call_id, 'name': func_name, 'result': result, 'category': meta.get('category'), 'visibility': meta.get('visibility')})}\n\n"
+                            yield f"data: {json.dumps({'type': 'tool_result', 'id': completed_call['id'], 'name': func_name, 'result': result, 'category': meta.get('category'), 'visibility': meta.get('visibility')})}\n\n"
 
                             if result.get("success"):
                                 tool_content = json.dumps(result.get("result", {}))
                             else:
-                                tool_content = json.dumps(
+                                tool_content = json.dumps({"error": result.get("error", "Tool execution failed")})
+
+                            messages.append({"role": "tool", "tool_call_id": completed_call["id"], "content": tool_content})
+
+                            # Ask model to finalize without tools
+                            messages.append({"role": "user", "content": "Please use the tool results above to answer my original question."})
+
+                            finalize_success = False
+                            try:
+                                finalize_params = params.copy()
+                                finalize_params["tools"] = parsed_tool_schemas
+                                finalize_params["tool_choice"] = "none"
+                                finalize_response = await svc.completion(model=model, messages=messages, **finalize_params)
+                                finalize_message = finalize_response.get("choices", [{}])[0].get("message", {})
+                                finalize_content = _content_to_text(finalize_message.get("content", ""))
+                                if finalize_content:
+                                    yield f"data: {json.dumps({'type': 'content', 'content': finalize_content})}\n\n"
+                                    finalize_success = True
+                                    sent_any_content = True
+                                    break
+                            except Exception as e:
+                                yield f"data: {json.dumps({'type': 'debug', 'message': f'Non-streaming finalization failed: {str(e)}'})}\n\n"
+
+                            if not finalize_success:
+                                try:
+                                    stream_params = params.copy()
+                                    async for chunk in svc.stream_completion(model=model, messages=messages, **stream_params):
+                                        yield f"data: {json.dumps({'type': 'content', 'content': chunk})}\n\n"
+                                        sent_any_content = True
+                                    break
+                                except Exception as e:
+                                    yield f"data: {json.dumps({'type': 'error', 'error': f'Streaming finalization failed: {str(e)}'})}\n\n"
+                                    break
+                        else:
+                            # No tool calls found; if we streamed any content already, stop the loop
+                            if sent_any_content:
+                                break
+                            else:
+                                # Fallback: no content streamed (unlikely); ensure something is sent
+                                yield f"data: {json.dumps({'type': 'content', 'content': 'No additional content generated.'})}\n\n"
+                                sent_any_content = True
+                                break
+                    else:
+                        response = await svc.completion(
+                            model=model, messages=messages, **call_params
+                        )
+                        message = response.get("choices", [{}])[0].get("message", {})
+
+                        # Attempt to surface model reasoning content when provided
+                        reasoning_parts: list[str] = []
+                        # Some providers expose top-level reasoning fields
+                        for key in ("reasoning", "thinking"):
+                            try:
+                                v = message.get(key)
+                                if isinstance(v, str) and v.strip():
+                                    reasoning_parts.append(v)
+                            except Exception:
+                                pass
+                        # And/or content blocks with various shapes
+                        content_blocks = message.get("content")
+                        if isinstance(content_blocks, list):
+                            for block in content_blocks:
+                                if not isinstance(block, dict):
+                                    continue
+                                btype = (block.get("type") or "").lower()
+                                if btype in {"thinking", "reasoning"}:
+                                    text = (
+                                        block.get("thinking")
+                                        or block.get("reasoning")
+                                        or block.get("content")
+                                        or block.get("text")
+                                        or ""
+                                    )
+                                    if isinstance(text, str) and text.strip():
+                                        reasoning_parts.append(text)
+                        if reasoning_parts:
+                            try:
+                                import asyncio as _asyncio
+                                text = "\n".join(reasoning_parts)
+                                import re as _re
+                                segments = [s for s in _re.split(r"(\n\n+|(?<=[\.!?])\s+)", text) if s and not s.isspace()]
+                                if not segments:
+                                    segments = [text]
+                                for seg in segments:
+                                    yield f"data: {json.dumps({'type': 'reasoning', 'content': seg})}\n\n"
+                                    await _asyncio.sleep(0)
+                            except Exception:
+                                yield f"data: {json.dumps({'type': 'reasoning', 'content': '\n'.join(reasoning_parts)})}\n\n"
+
+                        if tool_calls := message.get("tool_calls"):
+                            tool_call_info = []
+                            for tc in tool_calls:
+                                tool_call_info.append(
                                     {
-                                        "error": result.get(
-                                            "error", "Tool execution failed"
+                                        "id": tc.get("id", "unknown"),
+                                        "name": tc["function"]["name"],
+                                        "arguments": tc["function"]["arguments"],
+                                    }
+                                )
+
+                            yield f"data: {json.dumps({'type': 'tool_calls', 'calls': tool_call_info})}\n\n"
+
+                            messages.append(message)
+
+                            for tool_call in tool_calls:
+                                tool_call_id = tool_call.get("id", "unknown")
+                                func_name = tool_call["function"]["name"]
+                                func_args_str = tool_call["function"]["arguments"]
+
+                                meta = _tool_metadata(func_name)
+                                yield f"data: {json.dumps({'type': 'tool_executing', 'id': tool_call_id, 'name': func_name, 'category': meta.get('category'), 'visibility': meta.get('visibility')})}\n\n"
+
+                                try:
+                                    func_args = json.loads(func_args_str)
+                                except json.JSONDecodeError:
+                                    func_args = {}
+
+                                if func_name == "search_web":
+                                    try:
+                                        hint = parse_time_constraints(
+                                            f"{system or ''} \n {prompt}"
                                         )
+                                        if hint:
+                                            for k in ("time_hint", "after", "before"):
+                                                if k not in func_args:
+                                                    v = hint.get(k)
+                                                    if v:
+                                                        func_args[k] = v
+                                    except Exception:
+                                        pass
+
+                                # V2: dedupe/clamp for search_web
+                                if tool_loop_v2 and func_name == "search_web":
+                                    try:
+                                        q = (func_args.get("query") or "").strip().lower()
+                                        k_after = str(func_args.get("after") or "").strip()
+                                        k_before = str(func_args.get("before") or "").strip()
+                                        k_hint = str(func_args.get("time_hint") or "").strip().lower()
+                                        key = json.dumps({"q": q, "after": k_after, "before": k_before, "hint": k_hint}, sort_keys=True)
+
+                                        if key in search_cache:
+                                            result = search_cache[key]
+                                        else:
+                                            if unique_search_count >= search_clamp_limit:
+                                                if not clamp_warning_sent:
+                                                    clamp_warning_sent = True
+                                                    yield f"data: {json.dumps({'type': 'warning', 'message': f'Trimmed tool calls to {search_clamp_limit}', 'code': 'TOOL_CLAMP'})}\n\n"
+                                                result = {"success": False, "error": f"Search trimmed by clamp ({search_clamp_limit})"}
+                                            else:
+                                                result = await tool_executor.execute(func_name, func_args)
+                                                if result and result.get("success"):
+                                                    search_cache[key] = result
+                                                    unique_search_count += 1
+                                    except Exception:
+                                        result = await tool_executor.execute(func_name, func_args)
+                                else:
+                                    result = await tool_executor.execute(func_name, func_args)
+
+                                yield f"data: {json.dumps({'type': 'tool_result', 'id': tool_call_id, 'name': func_name, 'result': result, 'category': meta.get('category'), 'visibility': meta.get('visibility')})}\n\n"
+
+                                if result.get("success"):
+                                    tool_content = json.dumps(result.get("result", {}))
+                                else:
+                                    tool_content = json.dumps(
+                                        {
+                                            "error": result.get(
+                                                "error", "Tool execution failed"
+                                            )
+                                        }
+                                    )
+
+                                messages.append(
+                                    {
+                                        "role": "tool",
+                                        "tool_call_id": tool_call.get("id", "unknown"),
+                                        "content": tool_content,
                                     }
                                 )
 
                             messages.append(
                                 {
-                                    "role": "tool",
-                                    "tool_call_id": tool_call.get("id", "unknown"),
-                                    "content": tool_content,
+                                    "role": "user",
+                                    "content": "Please use the tool results above to answer my original question.",
                                 }
                             )
 
-                        messages.append(
-                            {
-                                "role": "user",
-                                "content": "Please use the tool results above to answer my original question.",
-                            }
-                        )
-
-                        finalize_success = False
-                        try:
-                            finalize_params = params.copy()
-                            finalize_params["tools"] = parsed_tool_schemas
-                            finalize_params["tool_choice"] = "none"
-
-                            finalize_response = await svc.completion(
-                                model=model, messages=messages, **finalize_params
-                            )
-
-                            finalize_message = finalize_response.get("choices", [{}])[
-                                0
-                            ].get("message", {})
-                            finalize_content = _content_to_text(
-                                finalize_message.get("content", "")
-                            )
-
-                            if finalize_content:
-                                yield f"data: {json.dumps({'type': 'content', 'content': finalize_content})}\n\n"
-                                finalize_success = True
-                                sent_any_content = True
-                                break
-                        except Exception as e:
-                            yield f"data: {json.dumps({'type': 'debug', 'message': f'Non-streaming finalization failed: {str(e)}'})}\n\n"
-
-                        if not finalize_success:
+                            finalize_success = False
                             try:
-                                stream_params = params.copy()
-                                final_content_parts = []
-                                async for chunk in svc.stream_completion(
-                                    model=model, messages=messages, **stream_params
-                                ):
-                                    final_content_parts.append(chunk)
-                                    yield f"data: {json.dumps({'type': 'content', 'content': chunk})}\n\n"
-                                    sent_any_content = True
+                                finalize_params = params.copy()
+                                finalize_params["tools"] = parsed_tool_schemas
+                                finalize_params["tool_choice"] = "none"
 
-                                if final_content_parts:
+                                finalize_response = await svc.completion(
+                                    model=model, messages=messages, **finalize_params
+                                )
+
+                                finalize_message = finalize_response.get("choices", [{}])[
+                                    0
+                                ].get("message", {})
+                                finalize_content = _content_to_text(
+                                    finalize_message.get("content", "")
+                                )
+
+                                if finalize_content:
+                                    yield f"data: {json.dumps({'type': 'content', 'content': finalize_content})}\n\n"
+                                    finalize_success = True
+                                    sent_any_content = True
                                     break
                             except Exception as e:
-                                yield f"data: {json.dumps({'type': 'error', 'error': f'Streaming finalization failed: {str(e)}'})}\n\n"
-                                break
+                                yield f"data: {json.dumps({'type': 'debug', 'message': f'Non-streaming finalization failed: {str(e)}'})}\n\n"
 
-                        if not sent_any_content:
-                            yield f"data: {json.dumps({'type': 'content', 'content': 'No additional content generated.'})}\n\n"
-                            sent_any_content = True
-                        break
-                    else:
-                        content = _content_to_text(message.get("content", ""))
-                        any_tools_executed = any(
-                            True for msg in messages if msg.get("role") == "tool"
-                        )
-                        if content:
-                            if (
-                                iteration == 2
-                                and not any_tools_executed
-                                and should_force_tools_first_turn
-                            ):
-                                messages.append(message)
-                                continue
-                            else:
-                                yield f"data: {json.dumps({'type': 'content', 'content': content})}\n\n"
-                                sent_any_content = True
-                                break
-                        else:
-                            if iteration <= 2 and not any_tools_executed:
-                                messages.append(message)
-                                continue
-                            else:
+                            if not finalize_success:
+                                try:
+                                    stream_params = params.copy()
+                                    final_content_parts = []
+                                    async for chunk in svc.stream_completion(
+                                        model=model, messages=messages, **stream_params
+                                    ):
+                                        final_content_parts.append(chunk)
+                                        yield f"data: {json.dumps({'type': 'content', 'content': chunk})}\n\n"
+                                        sent_any_content = True
+
+                                    if final_content_parts:
+                                        break
+                                except Exception as e:
+                                    yield f"data: {json.dumps({'type': 'error', 'error': f'Streaming finalization failed: {str(e)}'})}\n\n"
+                                    break
+
+                            if not sent_any_content:
                                 yield f"data: {json.dumps({'type': 'content', 'content': 'No additional content generated.'})}\n\n"
                                 sent_any_content = True
-                                break
+                            break
+                        else:
+                            content = _content_to_text(message.get("content", ""))
+                            any_tools_executed = any(
+                                True for msg in messages if msg.get("role") == "tool"
+                            )
+                            if content:
+                                if (
+                                    iteration == 2
+                                    and not any_tools_executed
+                                    and should_force_tools_first_turn
+                                ):
+                                    messages.append(message)
+                                    continue
+                                else:
+                                    yield f"data: {json.dumps({'type': 'content', 'content': content})}\n\n"
+                                    sent_any_content = True
+                                    break
+                            else:
+                                if iteration <= 2 and not any_tools_executed:
+                                    messages.append(message)
+                                    continue
+                                else:
+                                    yield f"data: {json.dumps({'type': 'content', 'content': 'No additional content generated.'})}\n\n"
+                                    sent_any_content = True
+                                    break
 
                 if iteration >= limit:
                     yield f"data: {json.dumps({'type': 'warning', 'message': f'Reached maximum tool call iterations ({limit})'})}\n\n"

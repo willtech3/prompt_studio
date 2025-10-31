@@ -140,6 +140,102 @@ class OpenRouterService:
                         # Yield raw to avoid hiding useful info
                         yield data
 
+    async def stream_events(
+        self,
+        model: str,
+        messages: list[dict[str, Any]],
+        **params: Any,
+    ) -> AsyncGenerator[dict[str, Any]]:
+        """Stream OpenRouter events with parsed deltas.
+
+        Yields dictionaries with types:
+          - {"type": "content_delta", "content": str}
+          - {"type": "reasoning", "content": str}
+          - {"type": "tool_call_delta", "index": int, "id": str|None, "name": str|None, "arguments": str|None}
+          - {"type": "done"}
+        """
+        client = await self._client_ctx()
+
+        payload: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "stream": True,
+        }
+        reasoning = params.pop("reasoning", None)
+        if reasoning:
+            payload["reasoning"] = reasoning
+        payload.update(params)
+
+        async with client.stream("POST", "/chat/completions", json=payload) as resp:
+            if resp.status_code >= 400:
+                body = None
+                try:
+                    await resp.aread()
+                    try:
+                        body_json = resp.json()
+                        body = body_json.get("error") or body_json
+                    except Exception:
+                        body = resp.text
+                except Exception:
+                    body = None
+                msg = f"{resp.status_code} from OpenRouter"
+                if body:
+                    msg += f": {body}"
+                raise httpx.HTTPStatusError(msg, request=resp.request, response=resp)
+            resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                if not line:
+                    continue
+                if not line.startswith("data: "):
+                    continue
+                data = line[6:]
+                if data == "[DONE]":
+                    yield {"type": "done"}
+                    break
+                try:
+                    import json as _json
+
+                    obj = _json.loads(data)
+                    choice = (obj.get("choices") or [{}])[0]
+                    delta = choice.get("delta") or {}
+
+                    # Content streaming
+                    if isinstance(delta.get("content"), str) and delta.get("content"):
+                        yield {"type": "content_delta", "content": delta.get("content")}
+
+                    # Reasoning streaming (varies by provider)
+                    if "reasoning" in delta:
+                        r = delta.get("reasoning")
+                        if isinstance(r, str) and r.strip():
+                            yield {"type": "reasoning", "content": r}
+                        elif isinstance(r, dict):
+                            text = r.get("content") or r.get("text") or ""
+                            if isinstance(text, str) and text.strip():
+                                yield {"type": "reasoning", "content": text}
+
+                    # Tool calls delta in OpenAI-compatible schema
+                    if isinstance(delta.get("tool_calls"), list):
+                        for tc in delta.get("tool_calls"):
+                            try:
+                                idx = tc.get("index")
+                                func = tc.get("function") or {}
+                                name = func.get("name")
+                                args_chunk = func.get("arguments")
+                                call_id = tc.get("id")
+                                yield {
+                                    "type": "tool_call_delta",
+                                    "index": idx if isinstance(idx, int) else 0,
+                                    "id": call_id,
+                                    "name": name,
+                                    "arguments": args_chunk,
+                                }
+                            except Exception:
+                                # ignore malformed partials
+                                pass
+                except Exception:
+                    # On parse errors, surface raw line as content to aid debugging
+                    yield {"type": "content_delta", "content": data}
+
     async def close(self) -> None:
         if self._client is not None:
             await self._client.aclose()

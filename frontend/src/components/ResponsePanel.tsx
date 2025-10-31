@@ -148,6 +148,12 @@ export function ResponsePanel() {
         else if (parsed.type === 'tool_executing') {
           // Tool is being executed
           setReasoningPhase(1)
+          // Collapse any open reasoning blocks when a tool starts to keep focus on search/results
+          setReasoningOpenMap((prev) => {
+            const next: Record<number, boolean> = { ...prev }
+            Object.keys(next).forEach((k) => { next[Number(k)] = false })
+            return next
+          })
           setRunTrace((prev) => {
             if (!prev) return prev
             const tools = prev.tools.map((t) => {
