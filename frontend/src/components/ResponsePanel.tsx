@@ -131,6 +131,8 @@ export function ResponsePanel() {
           const chunk = typeof parsed.content === 'string' ? parsed.content : ''
           if (chunk) {
             setReasoningTexts((prev) => ({ ...prev, [reasoningPhase]: (prev[reasoningPhase] || '') + chunk }))
+            // Open the reasoning panel for this phase on first token arrival
+            setReasoningOpenMap((prev) => (prev[reasoningPhase] ? prev : { ...prev, [reasoningPhase]: true }))
           }
         }
         else if (parsed.type === 'tool_calls') {
@@ -154,6 +156,10 @@ export function ResponsePanel() {
             Object.keys(next).forEach((k) => { next[Number(k)] = false })
             return next
           })
+          // Open search panel while search is running
+          if ((parsed.category === 'search') || (typeof parsed.name === 'string' && parsed.name.toLowerCase().includes('search'))) {
+            setSearchOpen(true)
+          }
           setRunTrace((prev) => {
             if (!prev) return prev
             const tools = prev.tools.map((t) => {
@@ -203,17 +209,32 @@ export function ResponsePanel() {
             })
             return { ...prev, tools }
           })
+          // Collapse search panel after it completes
+          if ((parsed.category === 'search') || (typeof parsed.name === 'string' && parsed.name.toLowerCase().includes('search'))) {
+            setSearchOpen(false)
+          }
         }
         else if (parsed.type === 'content') {
           // Regular content
           appendResponse(parsed.content)
-          // Auto-collapse search when main response starts
-          setSearchOpen(false)
+          // If we are in a post-tool reasoning phase and content started, collapse that reasoning block
+          setReasoningOpenMap((prev) => {
+            if (reasoningPhase > 0 && prev[reasoningPhase]) {
+              return { ...prev, [reasoningPhase]: false }
+            }
+            return prev
+          })
         }
         else if (parsed.type === 'done' || parsed.done) {
           // Stream complete
           setIsStreaming(false)
           setRunTrace((prev) => prev ? { ...prev, endedAt: nowIso() } : prev)
+          // Collapse any currently open reasoning blocks on completion
+          setReasoningOpenMap((prev) => {
+            const next: Record<number, boolean> = { ...prev }
+            Object.keys(next).forEach((k) => { next[Number(k)] = false })
+            return next
+          })
           if (currentStream.current) {
             api.stopStream(currentStream.current)
             currentStream.current = null
@@ -325,39 +346,56 @@ export function ResponsePanel() {
           </div>
         ) : null}
 
-        {/* Reasoning panels (phased, streaming-capable) */}
-        {Object.keys(reasoningTexts).map((k) => {
-          const phase = Number(k)
-          const txt = reasoningTexts[phase]
-          const open = !!reasoningOpenMap[phase]
-          const isActive = isStreaming && reasoningEffort && phase === reasoningPhase
+        {/* Reasoning panels (phase 0) shown before Search; later phases after Search */}
+        {(() => {
+          const keys = Object.keys(reasoningTexts).map(Number).sort((a,b)=>a-b)
+          const pre = keys.filter((k) => k === 0)
+          const post = keys.filter((k) => k > 0)
           return (
-            <ReasoningBlock
-              key={phase}
-              content={txt}
-              isStreaming={Boolean(isActive)}
-              open={open}
-              onToggle={() => setReasoningOpenMap((m) => ({ ...m, [phase]: !m[phase] }))}
-            />
-          )
-        })}
-        {/* Active phase placeholder when reasoning not yet received */}
-        {isStreaming && reasoningEffort && !(reasoningPhase in reasoningTexts) && (
-          <ReasoningBlock
-            key={`phase-${reasoningPhase}`}
-            content={''}
-            isStreaming={true}
-            open={!!reasoningOpenMap[reasoningPhase]}
-            onToggle={() => setReasoningOpenMap((m) => ({ ...m, [reasoningPhase]: !m[reasoningPhase] }))}
-          />
-        )}
+            <>
+              {/* Pre-tool reasoning (phase 0) */}
+              {pre.map((phase) => {
+                const txt = reasoningTexts[phase]
+                const open = !!reasoningOpenMap[phase]
+                const isActive = isStreaming && reasoningEffort && phase === reasoningPhase
+                return (
+                  <ReasoningBlock
+                    key={`reasoning-pre-${phase}`}
+                    content={txt}
+                    isStreaming={Boolean(isActive)}
+                    open={open}
+                    onToggle={() => setReasoningOpenMap((m) => ({ ...m, [phase]: !m[phase] }))}
+                  />
+                )
+              })}
 
-        {/* Search results preview (T3-style) */}
-        <SearchResultsInline
-          run={runTrace}
-          initialOpen={searchOpen}
-          isRunning={Boolean(runTrace?.tools?.some(t => (t.status === 'running') && ((t.category === 'search') || t.name.toLowerCase().includes('search'))))}
-        />
+              {/* Search results preview (T3-style) */}
+              <SearchResultsInline
+                run={runTrace}
+                open={searchOpen}
+                onOpenChange={setSearchOpen}
+                isRunning={Boolean(runTrace?.tools?.some(t => (t.status === 'running') && ((t.category === 'search') || t.name.toLowerCase().includes('search'))))}
+              />
+
+              {/* Post-tool reasoning (phase > 0) */}
+              {post.map((phase) => {
+                const txt = reasoningTexts[phase]
+                const open = !!reasoningOpenMap[phase]
+                const isActive = isStreaming && reasoningEffort && phase === reasoningPhase
+                return (
+                  <ReasoningBlock
+                    key={`reasoning-post-${phase}`}
+                    content={txt}
+                    isStreaming={Boolean(isActive)}
+                    open={open}
+                    onToggle={() => setReasoningOpenMap((m) => ({ ...m, [phase]: !m[phase] }))}
+                  />
+                )
+              })}
+
+            </>
+          )
+        })()}
 
         {/* Response Content */}
         <div className="prose prose-sm dark:prose-invert max-w-none break-words" aria-live="polite">

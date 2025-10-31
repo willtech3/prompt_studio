@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import type { RunTrace } from '../types/models'
 import { Globe, ChevronDown, ChevronRight } from 'lucide-react'
 
-interface Props { run?: RunTrace | null; initialOpen?: boolean; isRunning?: boolean }
+interface Props { run?: RunTrace | null; initialOpen?: boolean; isRunning?: boolean; open?: boolean; onOpenChange?: (open: boolean) => void }
 
 function faviconUrl(u?: string) {
   if (!u) return ''
@@ -12,7 +12,7 @@ function faviconUrl(u?: string) {
   } catch { return '' }
 }
 
-export default function SearchResultsInline({ run, initialOpen = true, isRunning = false }: Props) {
+export default function SearchResultsInline({ run, initialOpen = true, isRunning = false, open: controlledOpen, onOpenChange }: Props) {
   const links = useMemo(() => (run?.tools || []).flatMap(t => t.links || []), [run?.tools])
   const items = useMemo(() => {
     const map = new Map<string, { title: string; url: string; source?: string; snippet?: string }>()
@@ -29,11 +29,17 @@ export default function SearchResultsInline({ run, initialOpen = true, isRunning
     return Array.from(map.values())
   }, [links])
 
-  const [open, setOpen] = useState(initialOpen)
-  if (!items.length) return null
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(initialOpen)
+  const isControlled = typeof controlledOpen === 'boolean'
+  const open = isControlled ? (controlledOpen as boolean) : uncontrolledOpen
+  const toggle = () => {
+    if (isControlled) onOpenChange?.(!open)
+    else setUncontrolledOpen(o => !o)
+  }
+  if (!items.length && !isRunning) return null
   return (
     <section className="mb-3">
-      <button onClick={() => setOpen(o => !o)} className="w-full text-left text-sm flex items-center gap-2 text-gray-700 dark:text-gray-200">
+      <button onClick={toggle} className="w-full text-left text-sm flex items-center gap-2 text-gray-700 dark:text-gray-200">
         <Globe className="h-4 w-4" />
         <span className="font-medium">Searched the web</span>
         {isRunning && (
@@ -46,6 +52,12 @@ export default function SearchResultsInline({ run, initialOpen = true, isRunning
       </button>
       {open && (
         <div className="mt-2 space-y-2">
+          {isRunning && !items.length && (
+            <div className="text-xs text-gray-600 dark:text-gray-400 flex items-center gap-2">
+              <span className="inline-block h-2.5 w-2.5 rounded-full bg-blue-500 animate-pulse" />
+              Gathering sources…
+            </div>
+          )}
           {items.map((l, i) => (
             <a key={i} href={l.url} target="_blank" rel="noreferrer" className="block rounded-md border border-gray-200 dark:border-white/10 p-2 hover:bg-gray-50 dark:hover:bg-gray-900">
               <div className="flex items-start gap-2">

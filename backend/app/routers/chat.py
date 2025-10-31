@@ -700,16 +700,17 @@ async def stream_chat(
                             if not finalize_success:
                                 try:
                                     stream_params = params.copy()
-                                    final_content_parts = []
-                                    async for chunk in svc.stream_completion(
-                                        model=model, messages=messages, **stream_params
-                                    ):
-                                        final_content_parts.append(chunk)
-                                        yield f"data: {json.dumps({'type': 'content', 'content': chunk})}\n\n"
-                                        sent_any_content = True
-
-                                    if final_content_parts:
-                                        break
+                                    async for ev in svc.stream_events(model=model, messages=messages, **stream_params):
+                                        et = ev.get("type")
+                                        if et == "reasoning":
+                                            yield f"data: {json.dumps({'type': 'reasoning', 'content': ev.get('content', '')})}\n\n"
+                                            continue
+                                        if et == "content_delta":
+                                            yield f"data: {json.dumps({'type': 'content', 'content': ev.get('content', '')})}\n\n"
+                                            sent_any_content = True
+                                            continue
+                                        if et == "done":
+                                            break
                                 except Exception as e:
                                     yield f"data: {json.dumps({'type': 'error', 'error': f'Streaming finalization failed: {str(e)}'})}\n\n"
                                     break
