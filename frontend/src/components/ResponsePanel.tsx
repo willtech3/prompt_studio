@@ -86,6 +86,13 @@ export function ResponsePanel() {
     reasoningSilenceTimerRef.current = null
     setReasoningOpenMap({})
     setReasoningTexts({})
+    
+    // Seed a placeholder reasoning block if reasoning is requested
+    if (reasoningEffort && reasoningEffort.toLowerCase() !== 'auto') {
+      setReasoningOpenMap({ 0: true })
+      setReasoningTexts({ 0: '' })
+    }
+    
     setRunTrace({
       runId: `run-${Date.now()}`,
       model,
@@ -219,11 +226,16 @@ export function ResponsePanel() {
             })
             return { ...prev, tools }
           })
-          // Search finished: close search panel and prepare for next reasoning phase
+          // Search finished: prepare for next reasoning phase (keep search panel open)
           if ((parsed.category === 'search') || (typeof parsed.name === 'string' && parsed.name.toLowerCase().includes('search'))) {
-            setSearchOpen(false)
             const nextPhase = Math.max(0, ...Object.keys(reasoningTexts).map(Number)) + 1
             nextReasoningPhaseRef.current = nextPhase
+            // Seed a placeholder for the next reasoning phase if reasoning is enabled
+            if (reasoningEffort && reasoningEffort.toLowerCase() !== 'auto') {
+              setReasoningPhase(nextPhase)
+              setReasoningOpenMap((prev) => ({ ...prev, [nextPhase]: true }))
+              setReasoningTexts((prev) => ({ ...prev, [nextPhase]: '' }))
+            }
           }
         }
         else if (parsed.type === 'content') {
@@ -231,6 +243,8 @@ export function ResponsePanel() {
           appendResponse(parsed.content)
           // Content implies reasoning has ended for current phase
           setReasoningOpenMap((prev) => ({ ...prev, [reasoningPhase]: false }))
+          // Auto-collapse search panel when main response starts
+          setSearchOpen(false)
           pendingOpenSearchRef.current = false
           if (reasoningSilenceTimerRef.current) window.clearTimeout(reasoningSilenceTimerRef.current)
           reasoningSilenceTimerRef.current = null
