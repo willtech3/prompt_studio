@@ -38,7 +38,6 @@ export interface PromptState {
   variables: { name: string; value: string }[]
   parameters: ModelParameters
   reasoningEffort: 'auto' | 'low' | 'medium' | 'high'
-  toolSchemas: string
   response: string
   isStreaming: boolean
   history: HistoryItem[]
@@ -74,7 +73,6 @@ interface PromptActions {
   appendResponse: (chunk: string) => void
   setIsStreaming: (v: boolean) => void
   setReasoningEffort: (v: 'auto' | 'low' | 'medium' | 'high') => void
-  setToolSchemas: (v: string) => void
   setModelInfo: (info: any | undefined) => void
   setSupportedParameters: (params: string[]) => void
   setSystemOptInfo: (info: OptimizationInfo | undefined) => void
@@ -116,7 +114,6 @@ export const usePromptStore = create<PromptState & PromptActions>((set) => ({
     stop: null,
   },
   reasoningEffort: 'auto',
-  toolSchemas: '',
   response: '',
   isStreaming: false,
   history: [],
@@ -163,7 +160,6 @@ export const usePromptStore = create<PromptState & PromptActions>((set) => ({
   appendResponse: (chunk) => set((s) => ({ response: s.response + chunk })),
   setIsStreaming: (v) => set({ isStreaming: v }),
   setReasoningEffort: (v) => set({ reasoningEffort: v }),
-  setToolSchemas: (v) => set({ toolSchemas: v }),
   setModelInfo: (info) => set((s) => {
     // Auto-set maxTokens to model's max_completion_tokens if not already set
     const maxTokens = info?.max_completion_tokens || null

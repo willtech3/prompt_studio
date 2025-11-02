@@ -19,28 +19,6 @@ def get_tool_metadata(name: str) -> dict[str, str]:
     return {"category": "other", "visibility": "secondary"}
 
 
-def should_auto_inject_search(prompt: str | None, has_tools: bool) -> bool:
-    """Check if search tool should be auto-injected based on prompt.
-
-    Args:
-        prompt: User prompt
-        has_tools: Whether tools are already provided
-
-    Returns:
-        True if search should be auto-injected
-    """
-    if has_tools:
-        return False
-
-    prompt_lower = (prompt or "").lower()
-    recency_keywords = [
-        "news", "latest", "recent", "current", "last ", "past ",
-        "look up", "search", "today", "yesterday", "this week",
-        "last week", "this month", "last month"
-    ]
-    return any(keyword in prompt_lower for keyword in recency_keywords)
-
-
 def create_search_tool_schema() -> dict[str, Any]:
     """Create minimal search_web tool schema.
 

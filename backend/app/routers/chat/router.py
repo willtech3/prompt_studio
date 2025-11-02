@@ -25,7 +25,6 @@ from .parameters import (
     build_chat_params,
     parse_response_format,
     parse_stop_sequences,
-    parse_tool_schemas,
 )
 from .providers import (
     apply_provider_constraints,
@@ -48,7 +47,6 @@ from .tools import (
     create_search_tool_schema,
     get_tool_metadata,
     parse_tool_arguments,
-    should_auto_inject_search,
 )
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -296,8 +294,6 @@ async def stream_chat(
     max_tokens: int | None = Query(None, ge=1),
     top_p: float | None = Query(1.0, ge=0, le=1),
     reasoning_effort: str | None = Query(None),
-    tool_schemas: str | None = Query(None, description="JSON array of tool schemas"),
-    tools: str | None = Query(None, description="Legacy tool schemas parameter"),
     tool_choice: str | None = Query("auto"),
     max_tool_calls: int = Query(5, ge=1, le=20),
     top_k: int | None = Query(None),
@@ -323,22 +319,9 @@ async def stream_chat(
         # Build messages
         messages = build_initial_messages(system, prompt)
 
-        # Parse tools (support both parameter names)
-        tool_schemas_raw = tool_schemas or tools
-        parsed_tools = None
-        tool_names = set()
-
-        if tool_schemas_raw:
-            try:
-                parsed_tools, tool_names = parse_tool_schemas(tool_schemas_raw)
-            except ValueError as e:
-                yield stream_error_event(str(e))
-                return
-
-        # Auto-inject search if needed (only when no tools provided)
-        if not parsed_tools and should_auto_inject_search(prompt, has_tools=False):
-            parsed_tools = [create_search_tool_schema()]
-            tool_names = {"search_web"}
+        # Always provide search_web tool - trust model to decide when to use it
+        parsed_tools = [create_search_tool_schema()]
+        tool_names = {"search_web"}
 
         # Build parameters
         params = build_chat_params(
