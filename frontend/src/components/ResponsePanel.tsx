@@ -219,9 +219,8 @@ export function ResponsePanel() {
             })
             return { ...prev, tools }
           })
-          // Search finished: close search panel and prepare for next reasoning phase
+          // Search finished: prepare for next reasoning phase (collapse handled on first content chunk)
           if ((parsed.category === 'search') || (typeof parsed.name === 'string' && parsed.name.toLowerCase().includes('search'))) {
-            setSearchOpen(false)
             const nextPhase = Math.max(0, ...Object.keys(reasoningTexts).map(Number)) + 1
             nextReasoningPhaseRef.current = nextPhase
           }
@@ -229,6 +228,8 @@ export function ResponsePanel() {
         else if (parsed.type === 'content') {
           // Regular content
           appendResponse(parsed.content)
+          // Collapse Search Inline when main response starts
+          setSearchOpen(false)
           // Content implies reasoning has ended for current phase
           setReasoningOpenMap((prev) => ({ ...prev, [reasoningPhase]: false }))
           pendingOpenSearchRef.current = false

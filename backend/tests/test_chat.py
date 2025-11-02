@@ -8,6 +8,23 @@ def test_chat_stream_smoke(client):
     params = {"prompt": "Hi", "model": model_id}
 
     # Use streaming to validate SSE contract and that we receive some data
+    # Override DB dependency to avoid needing DATABASE_URL in CI
+    from app.main import app
+    from config.db import get_session as _get_session
+
+    async def _dummy_dep():
+        class _Dummy:
+            async def execute(self, *_args, **_kwargs):
+                class _R:
+                    def scalar_one_or_none(self):
+                        return None
+
+                return _R()
+
+        yield _Dummy()
+
+    app.dependency_overrides[_get_session] = _dummy_dep
+
     with client.stream("GET", "/api/chat/stream", params=params) as resp:
         assert resp.status_code == 200
         # Content-Type should indicate SSE
@@ -27,11 +44,10 @@ def test_chat_stream_smoke(client):
 
         # Optionally check that at least one parseable JSON payload has an expected type
         parsed = []
+        import contextlib
         for d in lines:
-            try:
+            with contextlib.suppress(Exception):
                 parsed.append(json.loads(d))
-            except Exception:
-                pass
         if parsed:
             assert any(
                 p.get("type") in {"content", "reasoning", "tool_calls", "done"}

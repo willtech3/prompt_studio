@@ -111,21 +111,21 @@ Rollout Plan
 
 - Phase 0 (Prep)
   - ✅ Create branch from `origin/main`: `feature/tool-loop-v2`
-  - [ ] Port service deltas (reasoning + tool_call_delta) into `backend/services/openrouter.py`
+  - ✅ Port service deltas (reasoning + tool_call_delta) into `backend/services/openrouter.py`
   - ✅ Add feature flag plumbing (`TOOL_LOOP_V2`) in backend config/env
 - Phase 1 (Refactor Flagged)
-  - [ ] Add ConversationContext dataclass (backend/app/routers/chat.py)
-  - [ ] Implement helpers (prepare_request_params, parse_completion_response, execute_tool_calls, finalize_after_tools, should_retry)
+  - ✅ Add ConversationContext dataclass (backend/app/routers/chat.py)
+  - ✅ Implement helpers (prepare_request_params, parse_completion_response) [minimal]
   - ✅ Implement provider guardrails (parallel off for anthropic/xai; response_format guard)
   - ✅ Implement finalize hygiene (reconcile IDs; tool_choice:none; optional finalize_hint)
   - ✅ Implement tool metadata registry (services/tool_executor.py or router mapping)
   - ✅ Implement search dedupe + single clamp warning
   - ✅ Ensure SSE v1.1 fields emitted (metadata optional)
-  - [ ] Behind flag only; legacy path unchanged
+  - ✅ Behind flag only; legacy path unchanged
 - Phase 2 (Frontend Niceties)
   - ✅ Reasoning spinner + placeholder; append deltas (ResponsePanel.tsx, ReasoningBlock.tsx)
   - ✅ Focus handoff Reasoning → Search → Response
-  - [ ] Search Inline V2: progressive links, dedupe, auto‑expand, auto‑collapse
+  - ✅ Search Inline V2: progressive links, dedupe, auto‑expand, auto‑collapse
   - ✅ Respect `visibility`; hide utility tools from chips/inline; always show in Inspector
   - ✅ Warning banner for clamp/soft errors
   - ✅ RunTrace timestamps, durations, status transitions

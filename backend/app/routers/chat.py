@@ -3,14 +3,16 @@ import datetime as dt
 import json
 import os
 import re
+from dataclasses import dataclass
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from config.db import create_all, get_session
 from app.core.config import is_tool_loop_v2_enabled
+from config.db import create_all, get_session
 from models.model_config import ModelConfig
 from services.openrouter import OpenRouterService
 from services.tool_executor import ToolExecutor
@@ -122,6 +124,62 @@ def _tool_metadata(name: str) -> dict:
     return {"category": "other", "visibility": "secondary"}
 
 
+# Conversation context and helper utilities (Phase 1 minimal extraction)
+@dataclass
+class ConversationContext:
+    model: str
+    provider_id: str
+    messages: list[dict]
+    base_params: dict[str, Any]
+    tool_schemas: list[dict] | None
+    tool_names: set[str]
+    tool_loop_v2: bool
+
+
+def prepare_request_params(
+    base_params: dict[str, Any],
+    tool_schemas: list[dict] | None,
+    tool_choice: str | None,
+    provider_id: str,
+) -> dict[str, Any]:
+    """Build per-call params from base, applying tool schema and provider guardrails.
+
+    Keeps behavior consistent with legacy inline implementation.
+    """
+    call_params = dict(base_params)
+    if tool_schemas:
+        call_params["tools"] = tool_schemas
+        if tool_choice and tool_choice not in ("auto", "none"):
+            call_params["tool_choice"] = "auto"  # explicit selection handled elsewhere
+        else:
+            call_params["tool_choice"] = "auto" if tool_choice != "none" else "none"
+    # Provider guardrails
+    if provider_id in {"anthropic", "xai"}:
+        call_params["parallel_tool_calls"] = False
+    return call_params
+
+
+def parse_completion_response_content(message: dict) -> str:
+    """Extract plain text content from a completion message (handles block formats)."""
+    try:
+        content = message.get("content")
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts: list[str] = []
+            for block in content:
+                if (
+                    isinstance(block, dict)
+                    and block.get("type") == "text"
+                    and isinstance(block.get("text"), str)
+                ):
+                    parts.append(block.get("text", ""))
+            return "\n".join([p for p in parts if p])
+    except Exception:
+        pass
+    return ""
+
+
 @router.get("/stream")
 async def stream_chat(
     model: str = Query(..., description="Model ID to use"),
@@ -231,23 +289,7 @@ async def stream_chat(
         svc = OpenRouterService()
         tool_executor = ToolExecutor() if parsed_tool_schemas else None
 
-        def _content_to_text(content) -> str:
-            try:
-                if isinstance(content, str):
-                    return content
-                if isinstance(content, list):
-                    parts = []
-                    for block in content:
-                        if (
-                            isinstance(block, dict)
-                            and block.get("type") == "text"
-                            and isinstance(block.get("text"), str)
-                        ):
-                            parts.append(block.get("text", ""))
-                    return "\n".join([p for p in parts if p])
-            except Exception:
-                pass
-            return ""
+        # content parsing moved to helper: parse_completion_response_content
 
         params = {"temperature": temperature, "top_p": top_p}
         if effective_max_tokens is not None:
@@ -500,7 +542,7 @@ async def stream_chat(
                                 finalize_params["tool_choice"] = "none"
                                 finalize_response = await svc.completion(model=model, messages=messages, **finalize_params)
                                 finalize_message = finalize_response.get("choices", [{}])[0].get("message", {})
-                                finalize_content = _content_to_text(finalize_message.get("content", ""))
+                                finalize_content = parse_completion_response_content(finalize_message)
                                 if finalize_content:
                                     yield f"data: {json.dumps({'type': 'content', 'content': finalize_content})}\n\n"
                                     finalize_success = True
@@ -685,9 +727,7 @@ async def stream_chat(
                                 finalize_message = finalize_response.get("choices", [{}])[
                                     0
                                 ].get("message", {})
-                                finalize_content = _content_to_text(
-                                    finalize_message.get("content", "")
-                                )
+                                finalize_content = parse_completion_response_content(finalize_message)
 
                                 if finalize_content:
                                     yield f"data: {json.dumps({'type': 'content', 'content': finalize_content})}\n\n"
@@ -720,7 +760,7 @@ async def stream_chat(
                                 sent_any_content = True
                             break
                         else:
-                            content = _content_to_text(message.get("content", ""))
+                            content = parse_completion_response_content(message)
                             any_tools_executed = any(
                                 True for msg in messages if msg.get("role") == "tool"
                             )
