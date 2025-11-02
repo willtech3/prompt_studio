@@ -55,24 +55,6 @@ async def get_session() -> AsyncGenerator[AsyncSession]:
         yield session
 
 
-async def try_get_session() -> AsyncGenerator[AsyncSession | None]:
-    """Dependency that yields None when DATABASE_URL is not configured.
-
-    Useful for endpoints where DB is optional; avoids raising before handler runs.
-    """
-    try:
-        if _sessionmaker is None:
-            init_engine()
-        if _sessionmaker is None:
-            yield None
-            return
-        async with _sessionmaker() as session:  # type: ignore[arg-type]
-            yield session
-    except Exception:
-        # On any init error, yield None to allow fallbacks
-        yield None
-
-
 async def create_all() -> None:
     engine = init_engine()
     if engine is None:

@@ -120,19 +120,11 @@ export function ParametersPanel() {
   const setTemperature = usePromptStore((s) => s.setTemperature)
   const setMaxTokens = usePromptStore((s) => s.setMaxTokens)
   const setTopP = usePromptStore((s) => s.setTopP)
-  const setStreaming = usePromptStore((s) => s.setStreaming)
   const setTopK = usePromptStore((s) => s.setTopK)
   const setFrequencyPenalty = usePromptStore((s) => s.setFrequencyPenalty)
   const setPresencePenalty = usePromptStore((s) => s.setPresencePenalty)
-  const setRepetitionPenalty = usePromptStore((s) => s.setRepetitionPenalty)
-  const setMinP = usePromptStore((s) => s.setMinP)
-  const setTopA = usePromptStore((s) => s.setTopA)
-  const setSeed = usePromptStore((s) => s.setSeed)
   const setResponseFormat = usePromptStore((s) => s.setResponseFormat)
   const setStop = usePromptStore((s) => s.setStop)
-  const setLogprobs = usePromptStore((s) => s.setLogprobs)
-  const setTopLogprobs = usePromptStore((s) => s.setTopLogprobs)
-  const setLogitBiasJson = usePromptStore((s) => s.setLogitBiasJson)
   const reasoningEffort = usePromptStore((s) => s.reasoningEffort)
   const setReasoningEffort = usePromptStore((s) => s.setReasoningEffort)
   const presetExplainer = usePromptStore((s) => s.presetExplainer)
@@ -151,17 +143,8 @@ export function ParametersPanel() {
       top_k: showAdvanced && check('top_k'),
       frequency_penalty: showAdvanced && check('frequency_penalty'),
       presence_penalty: showAdvanced && check('presence_penalty'),
-      // prune less prompt-centric knobs from UI by default
-      repetition_penalty: false,
-      min_p: false,
-      top_a: false,
-      seed: showAdvanced && check('seed'),
       response_format: showAdvanced && check('response_format'),
       stop: showAdvanced && check('stop'),
-      // analysis/debug
-      logprobs: false,
-      top_logprobs: false,
-      logit_bias: false,
       reasoning: check('include_reasoning') || check('reasoning'),
     }
   }, [supported, showAdvanced])
@@ -300,58 +283,6 @@ export function ParametersPanel() {
           </div>
         )}
 
-        {has.repetition_penalty && (
-          <div>
-            <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">Repetition penalty</label>
-            <input
-              type="number"
-              step={0.01}
-              className="w-full rounded-md bg-transparent border border-gray-300 dark:border-white/15 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={parameters.repetitionPenalty ?? ''}
-              onChange={(e) => setRepetitionPenalty(e.target.value === '' ? null : parseFloat(e.target.value))}
-            />
-          </div>
-        )}
-
-        {has.min_p && (
-          <div>
-            <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">Min‑p</label>
-            <input
-              type="number"
-              step={0.001}
-              className="w-full rounded-md bg-transparent border border-gray-300 dark:border-white/15 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={parameters.minP ?? ''}
-              onChange={(e) => setMinP(e.target.value === '' ? null : parseFloat(e.target.value))}
-            />
-          </div>
-        )}
-
-        {has.top_a && (
-          <div>
-            <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">Top‑a</label>
-            <input
-              type="number"
-              step={0.01}
-              className="w-full rounded-md bg-transparent border border-gray-300 dark:border-white/15 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={parameters.topA ?? ''}
-              onChange={(e) => setTopA(e.target.value === '' ? null : parseFloat(e.target.value))}
-            />
-          </div>
-        )}
-
-        {has.seed && (
-          <div>
-            <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">Seed</label>
-            <input
-              type="number"
-              className="w-full rounded-md bg-transparent border border-gray-300 dark:border-white/15 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={parameters.seed ?? ''}
-              placeholder="Deterministic runs when supported"
-              onChange={(e) => setSeed(e.target.value === '' ? null : Number(e.target.value))}
-            />
-            <p className="text-xs text-gray-500 mt-1">For reproducibility on models that support seeding.</p>
-          </div>
-        )}
 
         {has.response_format && (
           <div>
@@ -444,16 +375,6 @@ export function ParametersPanel() {
           </div>
         )}
 
-        <div className="flex items-center gap-2">
-          <input
-            id="streaming"
-            type="checkbox"
-            className="accent-blue-600"
-            checked={parameters.streaming}
-            onChange={(e) => setStreaming(e.target.checked)}
-          />
-          <label htmlFor="streaming" className="text-sm">Streaming</label>
-        </div>
       </div>
     </section>
   )

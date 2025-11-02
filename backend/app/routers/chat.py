@@ -150,21 +150,10 @@ async def stream_chat(
     top_k: int | None = Query(None, description="Top-K sampling"),
     frequency_penalty: float | None = Query(None, description="Frequency penalty"),
     presence_penalty: float | None = Query(None, description="Presence penalty"),
-    repetition_penalty: float | None = Query(None, description="Repetition penalty"),
-    min_p: float | None = Query(None, description="Minimum probability threshold"),
-    top_a: float | None = Query(None, description="Top-A sampling"),
-    seed: int | None = Query(None, description="Deterministic seed"),
     response_format: str | None = Query(
         None, description="Response format, e.g. json or json_object"
     ),
     stop: str | None = Query(None, description="Comma or newline-separated stop sequences"),
-    logprobs: bool | None = Query(None, description="Return log probabilities of tokens"),
-    top_logprobs: int | None = Query(
-        None, description="How many top tokens to include in logprobs"
-    ),
-    logit_bias: str | None = Query(
-        None, description="JSON object mapping token IDs to bias values"
-    ),
     session: AsyncSession = Depends(get_session),
 ):
     async def generate():
@@ -249,14 +238,6 @@ async def stream_chat(
             params["frequency_penalty"] = frequency_penalty
         if presence_penalty is not None:
             params["presence_penalty"] = presence_penalty
-        if repetition_penalty is not None:
-            params["repetition_penalty"] = repetition_penalty
-        if min_p is not None:
-            params["min_p"] = min_p
-        if top_a is not None:
-            params["top_a"] = top_a
-        if seed is not None:
-            params["seed"] = seed
         if response_format:
             rf_text = str(response_format).strip()
             provider_prefix = _provider_id_from_model(model)
@@ -278,18 +259,6 @@ async def stream_chat(
             stop_list = [s.strip() for s in parts if s.strip()]
             if stop_list:
                 params["stop"] = stop_list
-        if logprobs is not None:
-            params["logprobs"] = logprobs
-        if top_logprobs is not None:
-            try:
-                clamped_top = max(1, min(5, int(top_logprobs)))
-            except Exception:
-                clamped_top = 1
-            params["top_logprobs"] = clamped_top
-            params["logprobs"] = True
-        if logit_bias:
-            with contextlib.suppress(Exception):
-                params["logit_bias"] = json.loads(logit_bias)
 
         try:
             # Per-turn search dedupe/clamp (V2 only)

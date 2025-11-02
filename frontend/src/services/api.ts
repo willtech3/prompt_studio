@@ -11,15 +11,8 @@ export class APIClient {
     topK?: number | null
     frequencyPenalty?: number | null
     presencePenalty?: number | null
-    repetitionPenalty?: number | null
-    minP?: number | null
-    topA?: number | null
-    seed?: number | null
     responseFormat?: string | null
     stop?: string | null
-    logprobs?: boolean | null
-    topLogprobs?: number | null
-    logitBiasJson?: string | null
     // Tool calling
     tools?: string | null
     toolChoice?: string | null
@@ -35,15 +28,8 @@ export class APIClient {
     if (request.topK != null) params.set('top_k', String(request.topK))
     if (request.frequencyPenalty != null) params.set('frequency_penalty', String(request.frequencyPenalty))
     if (request.presencePenalty != null) params.set('presence_penalty', String(request.presencePenalty))
-    if (request.repetitionPenalty != null) params.set('repetition_penalty', String(request.repetitionPenalty))
-    if (request.minP != null) params.set('min_p', String(request.minP))
-    if (request.topA != null) params.set('top_a', String(request.topA))
-    if (request.seed != null) params.set('seed', String(request.seed))
     if (request.responseFormat) params.set('response_format', request.responseFormat)
     if (request.stop) params.set('stop', request.stop)
-    if (request.logprobs != null) params.set('logprobs', String(request.logprobs))
-    if (request.topLogprobs != null) params.set('top_logprobs', String(request.topLogprobs))
-    if (request.logitBiasJson) params.set('logit_bias', request.logitBiasJson)
     if (request.tools) params.set('tools', request.tools)
     if (request.toolChoice) params.set('tool_choice', request.toolChoice)
 

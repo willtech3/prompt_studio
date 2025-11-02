@@ -6,20 +6,12 @@ export interface ModelParameters {
   temperature: number
   maxTokens: number | null
   topP: number
-  streaming: boolean
   // Optional advanced params (null when unused)
   topK: number | null
   frequencyPenalty: number | null
   presencePenalty: number | null
-  repetitionPenalty: number | null
-  minP: number | null
-  topA: number | null
-  seed: number | null
   responseFormat: string | null
   stop: string | null
-  logprobs: boolean | null
-  topLogprobs: number | null
-  logitBiasJson: string | null
 }
 
 export interface OptimizationInfo {
@@ -69,19 +61,11 @@ interface PromptActions {
   setTemperature: (v: number) => void
   setMaxTokens: (v: number | null) => void
   setTopP: (v: number) => void
-  setStreaming: (v: boolean) => void
   setTopK: (v: number | null) => void
   setFrequencyPenalty: (v: number | null) => void
   setPresencePenalty: (v: number | null) => void
-  setRepetitionPenalty: (v: number | null) => void
-  setMinP: (v: number | null) => void
-  setTopA: (v: number | null) => void
-  setSeed: (v: number | null) => void
   setResponseFormat: (v: string | null) => void
   setStop: (v: string | null) => void
-  setLogprobs: (v: boolean | null) => void
-  setTopLogprobs: (v: number | null) => void
-  setLogitBiasJson: (v: string | null) => void
   addVariable: () => void
   updateVariableName: (index: number, name: string) => void
   updateVariableValue: (index: number, value: string) => void
@@ -125,19 +109,11 @@ export const usePromptStore = create<PromptState & PromptActions>((set) => ({
     temperature: 0.7,
     maxTokens: null,
     topP: 1,
-    streaming: true,
     topK: null,
     frequencyPenalty: null,
     presencePenalty: null,
-    repetitionPenalty: null,
-    minP: null,
-    topA: null,
-    seed: null,
     responseFormat: null,
     stop: null,
-    logprobs: null,
-    topLogprobs: null,
-    logitBiasJson: null,
   },
   reasoningEffort: 'auto',
   toolSchemas: '',
@@ -174,19 +150,11 @@ export const usePromptStore = create<PromptState & PromptActions>((set) => ({
   setTemperature: (v) => set((s) => ({ parameters: { ...s.parameters, temperature: v } })),
   setMaxTokens: (v) => set((s) => ({ parameters: { ...s.parameters, maxTokens: v === null ? null : Math.max(1, Math.floor(v)) } })),
   setTopP: (v) => set((s) => ({ parameters: { ...s.parameters, topP: Math.min(1, Math.max(0, v)) } })),
-  setStreaming: (v) => set((s) => ({ parameters: { ...s.parameters, streaming: v } })),
   setTopK: (v) => set((s) => ({ parameters: { ...s.parameters, topK: v } })),
   setFrequencyPenalty: (v) => set((s) => ({ parameters: { ...s.parameters, frequencyPenalty: v } })),
   setPresencePenalty: (v) => set((s) => ({ parameters: { ...s.parameters, presencePenalty: v } })),
-  setRepetitionPenalty: (v) => set((s) => ({ parameters: { ...s.parameters, repetitionPenalty: v } })),
-  setMinP: (v) => set((s) => ({ parameters: { ...s.parameters, minP: v } })),
-  setTopA: (v) => set((s) => ({ parameters: { ...s.parameters, topA: v } })),
-  setSeed: (v) => set((s) => ({ parameters: { ...s.parameters, seed: v } })),
   setResponseFormat: (v) => set((s) => ({ parameters: { ...s.parameters, responseFormat: v } })),
   setStop: (v) => set((s) => ({ parameters: { ...s.parameters, stop: v } })),
-  setLogprobs: (v) => set((s) => ({ parameters: { ...s.parameters, logprobs: v } })),
-  setTopLogprobs: (v) => set((s) => ({ parameters: { ...s.parameters, topLogprobs: v } })),
-  setLogitBiasJson: (v) => set((s) => ({ parameters: { ...s.parameters, logitBiasJson: v } })),
   addVariable: () => set((s) => ({ variables: [...s.variables, { name: '', value: '' }] })),
   updateVariableName: (index, name) => set((s) => ({ variables: s.variables.map((v, i) => i === index ? { ...v, name } : v) })),
   updateVariableValue: (index, value) => set((s) => ({ variables: s.variables.map((v, i) => i === index ? { ...v, value } : v) })),

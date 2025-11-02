@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from config.db import try_get_session
+from config.db import get_session
 from models.snapshot import Snapshot
 
 router = APIRouter(prefix="/api/saves", tags=["saves"])
@@ -51,10 +51,8 @@ class SaveItem(BaseModel):
 
 @router.post("", response_model=SaveResponse)
 async def create_save(
-    payload: SaveRequest, session: AsyncSession | None = Depends(try_get_session)
+    payload: SaveRequest, session: AsyncSession = Depends(get_session)
 ):
-    if session is None:
-        raise HTTPException(status_code=400, detail="DATABASE_URL not configured")
     sid = str(uuid.uuid4())
     kind = payload.kind or "state"
     snap = Snapshot(
@@ -80,9 +78,7 @@ async def create_save(
 
 
 @router.get("", response_model=list[SaveItem])
-async def list_saves(session: AsyncSession | None = Depends(try_get_session)):
-    if session is None:
-        raise HTTPException(status_code=400, detail="DATABASE_URL not configured")
+async def list_saves(session: AsyncSession = Depends(get_session)):
     rows = (
         (await session.execute(select(Snapshot).order_by(Snapshot.created_at.desc())))
         .scalars()
@@ -104,9 +100,7 @@ async def list_saves(session: AsyncSession | None = Depends(try_get_session)):
 
 
 @router.get("/{sid}")
-async def get_save(sid: str, session: AsyncSession | None = Depends(try_get_session)):
-    if session is None:
-        raise HTTPException(status_code=400, detail="DATABASE_URL not configured")
+async def get_save(sid: str, session: AsyncSession = Depends(get_session)):
     row = (await session.execute(select(Snapshot).where(Snapshot.id == sid))).scalar_one_or_none()
     if not row:
         raise HTTPException(status_code=404, detail="Not found")

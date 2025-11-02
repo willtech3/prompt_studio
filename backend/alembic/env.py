@@ -11,6 +11,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 # Import Base and models
 from config.db import Base, settings
+# Import models to register them with Base.metadata
+import models  # noqa: F401
 
 # All models now use a single Base class
 target_metadata = Base.metadata
