@@ -1,8 +1,8 @@
 """Refactored chat router with modular components."""
 
-import json
 import os
-from typing import Any, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
@@ -31,12 +31,10 @@ from .providers import (
     apply_provider_constraints,
     get_provider_id,
     get_tool_choice_override,
-    should_skip_forced_tool_choice,
 )
 from .search import SearchTracker
 from .streaming import (
     stream_content_event,
-    stream_debug_event,
     stream_done_event,
     stream_error_event,
     stream_reasoning_event,
@@ -51,7 +49,6 @@ from .tools import (
     get_tool_metadata,
     parse_tool_arguments,
     should_auto_inject_search,
-    should_force_initial_search,
 )
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -165,7 +162,7 @@ async def finalize_response(
     messages: list[dict[str, Any]],
     params: dict[str, Any],
     tools: list[dict[str, Any]]
-) -> AsyncGenerator[str, None]:
+) -> AsyncGenerator[str]:
     """Finalize response after tool execution."""
     messages = append_finalization_prompt(messages)
 
@@ -201,9 +198,8 @@ async def execute_with_tools(
     tools: list[dict[str, Any]],
     tool_names: set[str],
     tool_choice: str | None,
-    max_calls: int,
-    prompt_implies_recency: bool
-) -> AsyncGenerator[str, None]:
+    max_calls: int
+) -> AsyncGenerator[str]:
     """Execute chat with tool calling support."""
     executor = ToolExecutor()
     search_tracker = SearchTracker()
@@ -217,19 +213,10 @@ async def execute_with_tools(
         call_params = params.copy()
         call_params["tools"] = tools
 
-        # Determine tool choice
-        if should_force_initial_search(
-            iteration, prompt_implies_recency, "search_web" in tool_names,
-            tool_choice, provider
-        ):
-            call_params["tool_choice"] = {
-                "type": "function",
-                "function": {"name": "search_web"}
-            }
-        else:
-            call_params["tool_choice"] = get_tool_choice_override(
-                tool_choice, provider, tool_names
-            )
+        # Set tool choice - trust the model to decide when to use tools
+        call_params["tool_choice"] = get_tool_choice_override(
+            tool_choice, provider, tool_names
+        )
 
         # Apply provider constraints
         call_params = apply_provider_constraints(call_params, model, has_tools=True)
@@ -348,10 +335,8 @@ async def stream_chat(
                 yield stream_error_event(str(e))
                 return
 
-        # Auto-inject search if needed
-        # Note: Check recency independently of tools to preserve force-search logic
-        prompt_implies_recency = should_auto_inject_search(prompt, has_tools=False)
-        if not parsed_tools and prompt_implies_recency:
+        # Auto-inject search if needed (only when no tools provided)
+        if not parsed_tools and should_auto_inject_search(prompt, has_tools=False):
             parsed_tools = [create_search_tool_schema()]
             tool_names = {"search_web"}
 
@@ -380,8 +365,7 @@ async def stream_chat(
                 # Execute with tools
                 async for event in execute_with_tools(
                     svc, model, messages, params, parsed_tools, tool_names,
-                    tool_choice, max_tool_calls or MAX_TOOL_CALLS,
-                    prompt_implies_recency
+                    tool_choice, max_tool_calls or MAX_TOOL_CALLS
                 ):
                     yield event
             else:

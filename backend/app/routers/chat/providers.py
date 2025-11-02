@@ -30,20 +30,6 @@ def should_disable_parallel_tools(provider: str) -> bool:
     return provider in {"anthropic", "xai"}
 
 
-def should_skip_forced_tool_choice(provider: str) -> bool:
-    """Check if provider has issues with forced tool choice.
-
-    xAI models have known issues with forced tool_choice.
-
-    Args:
-        provider: Provider ID
-
-    Returns:
-        True if forced tool choice should be skipped
-    """
-    return provider in {"xai"}
-
-
 def supports_response_format(provider: str) -> bool:
     """Check if provider supports response_format parameter.
 

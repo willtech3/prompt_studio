@@ -142,7 +142,7 @@ def parse_tool_schemas(
         return parsed_schemas, tool_names
 
     except json.JSONDecodeError:
-        raise ValueError(f"Invalid tools JSON")
+        raise ValueError("Invalid tools JSON")
     except Exception as e:
         raise ValueError(f"Error parsing tools: {str(e)}")
 
