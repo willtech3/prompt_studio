@@ -31,7 +31,6 @@ from .providers import (
     get_provider_id,
     get_tool_choice_override,
 )
-from .search import SearchCache
 from .streaming import (
     stream_content_event,
     stream_done_event,
@@ -126,29 +125,6 @@ async def stream_until_tool_call(
     return completed_call, content_sent, yielded_events
 
 
-async def execute_tool_with_search_tracking(
-    executor: ToolExecutor,
-    tool_name: str,
-    arguments: dict[str, Any],
-    search_cache: SearchCache
-) -> dict[str, Any]:
-    """Execute a tool with search deduplication."""
-    if tool_name == "search_web":
-        # Check cache first
-        cached = search_cache.get_cached(arguments)
-        if cached:
-            return cached
-
-        # Execute search
-        result = await executor.execute(tool_name, arguments)
-
-        # Cache successful result
-        search_cache.cache_result(arguments, result)
-        return result
-    else:
-        return await executor.execute(tool_name, arguments)
-
-
 async def finalize_response(
     svc: OpenRouterService,
     model: str,
@@ -195,7 +171,6 @@ async def execute_with_tools(
 ) -> AsyncGenerator[str]:
     """Execute chat with tool calling support."""
     executor = ToolExecutor()
-    search_cache = SearchCache()
     provider = get_provider_id(model)
     iteration = 0
 
@@ -247,16 +222,8 @@ async def execute_with_tools(
             meta["category"], meta["visibility"]
         )
 
-        # Handle search with deduplication
-        if func_name == "search_web":
-            cached = search_cache.get_cached(func_args)
-            if cached:
-                result = cached
-            else:
-                result = await executor.execute(func_name, func_args)
-                search_cache.cache_result(func_args, result)
-        else:
-            result = await executor.execute(func_name, func_args)
+        # Execute tool directly - trust model to not spam identical queries
+        result = await executor.execute(func_name, func_args)
 
         yield stream_tool_result_event(
             completed_call["id"], func_name, result,

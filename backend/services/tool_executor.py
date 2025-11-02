@@ -112,17 +112,29 @@ class ToolExecutor:
                 "error": f"Tool '{tool_name}' failed: {str(e)}"
             }
 
-    async def _search_web(self, query: str, num_results: int = 3, time_hint: str | None = None, after: str | None = None, before: str | None = None) -> dict:
+    async def _search_web(
+        self,
+        query: str,
+        num_results: int = 3,
+        time_hint: str | None = None,
+        after: str | None = None,
+        before: str | None = None
+    ) -> dict:
         """
         Search the web using Brave Search API (uniform across all models).
 
         Args:
             query: Search query string
             num_results: Number of results to return (1-5)
+            time_hint: Ignored - kept for compatibility with model calls
+            after: Ignored - kept for compatibility with model calls
+            before: Ignored - kept for compatibility with model calls
 
         Returns:
             Dictionary with search results, or an error message when misconfigured.
         """
+        # Note: time_hint, after, before are accepted but ignored
+        # They were too restrictive and caused 0 results for many queries
         # Validate inputs
         if not query or not query.strip():
             return {"error": "Query cannot be empty"}
@@ -137,13 +149,12 @@ class ToolExecutor:
                         "query": query,
                     }
 
-                freshness_map = {"day": "pd", "week": "pw", "month": "pm", "year": "py"}
+                # Don't use freshness filtering - too restrictive for most queries
+                # Brave Search naturally prioritizes recent/relevant results
                 params = {
                     "q": query,
                     "count": max(1, min(5, num_results)),
                 }
-                if time_hint in freshness_map:
-                    params["freshness"] = freshness_map[time_hint]
 
                 r = await client.get(
                     "https://api.search.brave.com/res/v1/web/search",
