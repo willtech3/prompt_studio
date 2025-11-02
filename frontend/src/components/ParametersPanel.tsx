@@ -25,41 +25,6 @@ const TOOL_DEFINITIONS = {
         required: ["query"]
       }
     }
-  },
-  get_current_time: {
-    type: "function",
-    function: {
-      name: "get_current_time",
-      description: "Get the current date and time in ISO 8601 format (UTC timezone).",
-      parameters: {
-        type: "object",
-        properties: {
-          timezone: {
-            type: "string",
-            description: "Timezone name (e.g., 'UTC', 'America/New_York'). Defaults to UTC.",
-            default: "UTC"
-          }
-        },
-        required: []
-      }
-    }
-  },
-  calculate: {
-    type: "function",
-    function: {
-      name: "calculate",
-      description: "Safely evaluate a mathematical expression. Supports basic arithmetic: +, -, *, /, ** (power). No variables or functions allowed.",
-      parameters: {
-        type: "object",
-        properties: {
-          expression: {
-            type: "string",
-            description: "Mathematical expression to evaluate (e.g., '25 * 17 + 89')"
-          }
-        },
-        required: ["expression"]
-      }
-    }
   }
 }
 
@@ -336,30 +301,6 @@ export function ParametersPanel() {
                 <div className="flex-1">
                   <div className="text-sm font-medium">search_web</div>
                   <div className="text-xs text-gray-500">Search the web for current information</div>
-                </div>
-              </label>
-              <label className="flex items-start gap-2 p-2 rounded hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="mt-0.5 accent-blue-600"
-                  checked={enabledTools.includes('get_current_time')}
-                  onChange={(e) => handleToolToggle('get_current_time', e.target.checked)}
-                />
-                <div className="flex-1">
-                  <div className="text-sm font-medium">get_current_time</div>
-                  <div className="text-xs text-gray-500">Get current date and time in UTC</div>
-                </div>
-              </label>
-              <label className="flex items-start gap-2 p-2 rounded hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="mt-0.5 accent-blue-600"
-                  checked={enabledTools.includes('calculate')}
-                  onChange={(e) => handleToolToggle('calculate', e.target.checked)}
-                />
-                <div className="flex-1">
-                  <div className="text-sm font-medium">calculate</div>
-                  <div className="text-xs text-gray-500">Safely evaluate mathematical expressions</div>
                 </div>
               </label>
             </div>
