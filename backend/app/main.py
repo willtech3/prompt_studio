@@ -55,8 +55,3 @@ async def health():
     # also report DB availability
     db_ready = init_engine() is not None
     return {"status": "healthy", "db": db_ready}
-
-
-# Endpoints moved to dedicated routers:
-# - GET /api/chat/stream → routers/chat.py
-# - POST /api/optimize → routers/optimize.py

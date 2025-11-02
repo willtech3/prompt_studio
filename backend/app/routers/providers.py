@@ -39,9 +39,7 @@ async def list_providers(session: AsyncSession = Depends(get_session)):
 
     # Filter to only supported providers (those with content)
     supported = (
-        (await session.execute(select(ProviderContent.provider_id).distinct()))
-        .scalars()
-        .all()
+        (await session.execute(select(ProviderContent.provider_id).distinct())).scalars().all()
     )
 
     providers = []
@@ -58,9 +56,7 @@ async def list_providers(session: AsyncSession = Depends(get_session)):
 
 
 @router.get("/{provider_id}/guide")
-async def get_provider_guide(
-    provider_id: str, session: AsyncSession = Depends(get_session)
-):
+async def get_provider_guide(provider_id: str, session: AsyncSession = Depends(get_session)):
     """Return optimization guide for a provider as a structured object."""
     row = (
         await session.execute(
@@ -95,9 +91,7 @@ async def get_provider_prompting_guides(
     general_row = (await session.execute(query)).scalar_one_or_none()
 
     if not general_row:
-        raise HTTPException(
-            status_code=404, detail="Provider prompting guides not found"
-        )
+        raise HTTPException(status_code=404, detail="Provider prompting guides not found")
 
     result = {
         "title": general_row.title,

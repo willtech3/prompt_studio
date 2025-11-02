@@ -126,14 +126,10 @@ async def stream_chat(
     model: str = Query(..., description="Model ID to use"),
     prompt: str = Query("", description="User prompt content"),
     system: str | None = Query(None, description="Optional system prompt"),
-    temperature: float | None = Query(
-        0.7, ge=0, le=2, description="Sampling temperature"
-    ),
+    temperature: float | None = Query(0.7, ge=0, le=2, description="Sampling temperature"),
     max_tokens: int | None = Query(None, ge=1, description="Max tokens for completion"),
     top_p: float | None = Query(1.0, ge=0, le=1, description="Nucleus sampling"),
-    reasoning_effort: str | None = Query(
-        None, description="Reasoning effort: low|medium|high"
-    ),
+    reasoning_effort: str | None = Query(None, description="Reasoning effort: low|medium|high"),
     # Tools: accept both tool_schemas and tools (legacy)
     tool_schemas: str | None = Query(
         None, description="JSON-encoded array of tool schemas (OpenAI format)"
@@ -161,12 +157,8 @@ async def stream_chat(
     response_format: str | None = Query(
         None, description="Response format, e.g. json or json_object"
     ),
-    stop: str | None = Query(
-        None, description="Comma or newline-separated stop sequences"
-    ),
-    logprobs: bool | None = Query(
-        None, description="Return log probabilities of tokens"
-    ),
+    stop: str | None = Query(None, description="Comma or newline-separated stop sequences"),
+    logprobs: bool | None = Query(None, description="Return log probabilities of tokens"),
     top_logprobs: int | None = Query(
         None, description="How many top tokens to include in logprobs"
     ),
@@ -188,9 +180,7 @@ async def stream_chat(
             try:
                 await create_all()
                 model_config = (
-                    await session.execute(
-                        select(ModelConfig).where(ModelConfig.model_id == model)
-                    )
+                    await session.execute(select(ModelConfig).where(ModelConfig.model_id == model))
                 ).scalar_one_or_none()
                 if model_config and model_config.max_completion_tokens:
                     effective_max_tokens = model_config.max_completion_tokens
@@ -345,9 +335,7 @@ async def stream_chat(
                         else:
                             call_params["tool_choice"] = "auto"
                     else:
-                        call_params["tool_choice"] = (
-                            "auto" if tool_choice != "none" else "none"
-                        )
+                        call_params["tool_choice"] = "auto" if tool_choice != "none" else "none"
 
                     provider_prefix = _provider_id_from_model(model)
                     skip_forced_tool_choice = provider_prefix in {"xai"}
@@ -393,16 +381,12 @@ async def stream_chat(
                             if ev.get("name"):
                                 b["name"] = ev.get("name")
                             if isinstance(ev.get("arguments"), str):
-                                b["arguments"] = (b.get("arguments") or "") + ev.get(
-                                    "arguments"
-                                )
+                                b["arguments"] = (b.get("arguments") or "") + ev.get("arguments")
                             tool_builders[idx] = b
                             # Check if arguments parse as JSON and name exists → consider call complete
                             try:
                                 if b.get("name") and b.get("arguments"):
-                                    json.loads(
-                                        b["arguments"]
-                                    )  # will raise until complete
+                                    json.loads(b["arguments"])  # will raise until complete
                                     call_id = b.get("id") or f"call_{idx}_{iteration}"
                                     completed_call = {
                                         "id": call_id,
@@ -445,9 +429,7 @@ async def stream_chat(
 
                         if func_name == "search_web":
                             try:
-                                hint = parse_time_constraints(
-                                    f"{system or ''} \n {prompt}"
-                                )
+                                hint = parse_time_constraints(f"{system or ''} \n {prompt}")
                                 if hint:
                                     for k in ("time_hint", "after", "before"):
                                         if k not in func_args:
@@ -466,11 +448,7 @@ async def stream_chat(
                                 q = (func_args.get("query") or "").strip().lower()
                                 k_after = str(func_args.get("after") or "").strip()
                                 k_before = str(func_args.get("before") or "").strip()
-                                k_hint = (
-                                    str(func_args.get("time_hint") or "")
-                                    .strip()
-                                    .lower()
-                                )
+                                k_hint = str(func_args.get("time_hint") or "").strip().lower()
                                 key = json.dumps(
                                     {
                                         "q": q,
@@ -493,16 +471,12 @@ async def stream_chat(
                                             "error": f"Search trimmed by clamp ({search_clamp_limit})",
                                         }
                                     else:
-                                        result = await tool_executor.execute(
-                                            func_name, func_args
-                                        )
+                                        result = await tool_executor.execute(func_name, func_args)
                                         if result and result.get("success"):
                                             search_cache[key] = result
                                             unique_search_count += 1
                             except Exception:
-                                result = await tool_executor.execute(
-                                    func_name, func_args
-                                )
+                                result = await tool_executor.execute(func_name, func_args)
                         else:
                             result = await tool_executor.execute(func_name, func_args)
 
@@ -539,9 +513,9 @@ async def stream_chat(
                             finalize_response = await svc.completion(
                                 model=model, messages=messages, **finalize_params
                             )
-                            finalize_message = finalize_response.get("choices", [{}])[
-                                0
-                            ].get("message", {})
+                            finalize_message = finalize_response.get("choices", [{}])[0].get(
+                                "message", {}
+                            )
                             finalize_content = _content_to_text(
                                 finalize_message.get("content", "")
                             )
@@ -580,9 +554,7 @@ async def stream_chat(
                         yield f"data: {json.dumps({'type': 'content', 'content': 'Stopped after maximum tool calls. No further content generated by the model.'})}\n\n"
                         sent_any_content = True
             else:
-                async for chunk in svc.stream_completion(
-                    model=model, messages=messages, **params
-                ):
+                async for chunk in svc.stream_completion(model=model, messages=messages, **params):
                     yield f"data: {json.dumps({'type': 'content', 'content': chunk})}\n\n"
                     sent_any_content = True
 

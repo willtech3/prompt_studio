@@ -50,9 +50,7 @@ async def optimize_prompt(req: OptimizeRequest):
 
     # Add system context if optimizing a user prompt
     if req.system and req.kind == "user":
-        user_parts.append(
-            "System prompt context (for reference only, do not optimize this):"
-        )
+        user_parts.append("System prompt context (for reference only, do not optimize this):")
         user_parts.append(req.system)
         user_parts.append("")
 
@@ -74,10 +72,7 @@ async def optimize_prompt(req: OptimizeRequest):
         )
 
         optimized_prompt = (
-            payload.get("choices", [{}])[0]
-            .get("message", {})
-            .get("content", "")
-            .strip()
+            payload.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
         )
 
         if not optimized_prompt:
@@ -100,13 +95,9 @@ async def optimize_prompt(req: OptimizeRequest):
             changes.append("Refined prompt structure and wording")
 
         # Check for provider-specific patterns
-        if provider_id == "anthropic" and (
-            "<" in optimized_prompt and ">" in optimized_prompt
-        ):
+        if provider_id == "anthropic" and ("<" in optimized_prompt and ">" in optimized_prompt):
             notes.append("Added XML-style tags for better structure")
-        elif provider_id == "openai" and (
-            "```" in optimized_prompt or "<<<" in optimized_prompt
-        ):
+        elif provider_id == "openai" and ("```" in optimized_prompt or "<<<" in optimized_prompt):
             notes.append("Added delimiters for clear input/output separation")
         elif provider_id == "deepseek" and "<think>" in optimized_prompt.lower():
             notes.append("Added thinking blocks for reasoning tasks")
@@ -114,8 +105,6 @@ async def optimize_prompt(req: OptimizeRequest):
         if "# " in optimized_prompt or "## " in optimized_prompt:
             notes.append("Added section headers for organization")
 
-        return OptimizeResponse(
-            optimized=optimized_prompt, changes=changes, notes=notes
-        )
+        return OptimizeResponse(optimized=optimized_prompt, changes=changes, notes=notes)
     finally:
         await svc.close()

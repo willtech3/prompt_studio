@@ -107,9 +107,7 @@ async def list_saves(session: AsyncSession | None = Depends(try_get_session)):
 async def get_save(sid: str, session: AsyncSession | None = Depends(try_get_session)):
     if session is None:
         raise HTTPException(status_code=400, detail="DATABASE_URL not configured")
-    row = (
-        await session.execute(select(Snapshot).where(Snapshot.id == sid))
-    ).scalar_one_or_none()
+    row = (await session.execute(select(Snapshot).where(Snapshot.id == sid))).scalar_one_or_none()
     if not row:
         raise HTTPException(status_code=404, detail="Not found")
     return {

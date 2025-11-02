@@ -31,9 +31,7 @@ async def list_models(session: AsyncSession = Depends(get_session)):
 async def get_model_info(model_path: str, session: AsyncSession = Depends(get_session)):
     """Return detailed model metadata for a given model ID."""
     row = (
-        await session.execute(
-            select(ModelConfig).where(ModelConfig.model_id == model_path)
-        )
+        await session.execute(select(ModelConfig).where(ModelConfig.model_id == model_path))
     ).scalar_one_or_none()
     if not row:
         raise HTTPException(status_code=404, detail="Model not found")

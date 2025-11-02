@@ -18,13 +18,13 @@ test:
 lint:
     uv run ruff check app/ tests/
 
-# Format code with black
+# Format code with ruff
 format:
-    uv run black app/ tests/
+    uv run ruff format app/ tests/
 
-# Run type checking with mypy
-typecheck:
-    uv run mypy app/
+# Check formatting without making changes
+format-check:
+    uv run ruff format --check app/ tests/
 
 # Run database migrations
 migrate:
@@ -49,3 +49,17 @@ models:
 # Health check (requires API running)
 health:
     curl http://127.0.0.1:8000/health
+
+# Clean up all caches and temporary files
+clean:
+    @echo "Cleaning up caches and temporary files..."
+    find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+    find . -type f -name "*.pyc" -delete 2>/dev/null || true
+    find . -type f -name "*.pyo" -delete 2>/dev/null || true
+    find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
+    find . -type d -name ".mypy_cache" -exec rm -rf {} + 2>/dev/null || true
+    find . -type d -name ".ruff_cache" -exec rm -rf {} + 2>/dev/null || true
+    rm -rf htmlcov/ 2>/dev/null || true
+    rm -f .coverage 2>/dev/null || true
+    rm -f coverage.xml 2>/dev/null || true
+    @echo "✓ Cleanup complete!"
