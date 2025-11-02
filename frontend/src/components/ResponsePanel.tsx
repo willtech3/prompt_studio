@@ -7,7 +7,7 @@ import { usePromptStore } from '../store/promptStore'
 import { api } from '../services/api'
 import { useToastStore } from '../store/toastStore'
 import { useUIStore } from '../store/uiStore'
-import { RunTrace, ToolExecutionTrace, ReasoningBlock as ReasoningBlockType } from '../types/models'
+import { RunTrace, ToolExecutionTrace } from '../types/models'
 import ToolChips from './ToolChips'
 import RunInspectorDrawer from './RunInspectorDrawer'
 import ResponseFootnotes from './ResponseFootnotes'
@@ -37,6 +37,14 @@ export function ResponsePanel() {
   const [runTrace, setRunTrace] = useState<RunTrace | null>(null)
   const [inspectorOpen, setInspectorOpen] = useState(false)
   const [focusToolId, setFocusToolId] = useState<string | undefined>()
+  const [warning, setWarning] = useState<string | null>(null)
+  const [searchOpen, setSearchOpen] = useState<boolean>(true)
+  const [reasoningPhase, setReasoningPhase] = useState<number>(0)
+  const nextReasoningPhaseRef = useRef<number>(0)
+  const pendingOpenSearchRef = useRef<boolean>(false)
+  const reasoningSilenceTimerRef = useRef<number | null>(null)
+  const [reasoningOpenMap, setReasoningOpenMap] = useState<Record<number, boolean>>({})
+  const [reasoningTexts, setReasoningTexts] = useState<Record<number, string>>({})
 
   const nowIso = () => new Date().toISOString()
   const parseArgs = (args: string): Record<string, unknown> | null => {
@@ -69,6 +77,15 @@ export function ResponsePanel() {
   const onGenerate = () => {
     if (isStreaming) return
     setResponse('')
+    setWarning(null)
+    setSearchOpen(true)
+    setReasoningPhase(0)
+    nextReasoningPhaseRef.current = 0
+    pendingOpenSearchRef.current = false
+    if (reasoningSilenceTimerRef.current) window.clearTimeout(reasoningSilenceTimerRef.current)
+    reasoningSilenceTimerRef.current = null
+    setReasoningOpenMap({})
+    setReasoningTexts({})
     setRunTrace({
       runId: `run-${Date.now()}`,
       model,
@@ -118,13 +135,23 @@ export function ResponsePanel() {
         
         // Handle different message types
         if (parsed.type === 'reasoning') {
-          // Model provided reasoning/thinking content
-          const reasoningBlock: ReasoningBlockType = {
-            id: `reasoning-${Date.now()}`,
-            content: parsed.content,
-            timestamp: nowIso(),
+          const chunk = typeof parsed.content === 'string' ? parsed.content : ''
+          if (chunk) {
+            const phase = nextReasoningPhaseRef.current
+            if (phase !== reasoningPhase) setReasoningPhase(phase)
+            setReasoningTexts((prev) => ({ ...prev, [phase]: (prev[phase] || '') + chunk }))
+            // Open the reasoning panel for this phase on first token arrival
+            setReasoningOpenMap((prev) => (prev[phase] ? prev : { ...prev, [phase]: true }))
+            // If a search is pending, only open it after a brief silence in reasoning
+            if (pendingOpenSearchRef.current) {
+              if (reasoningSilenceTimerRef.current) window.clearTimeout(reasoningSilenceTimerRef.current)
+              reasoningSilenceTimerRef.current = window.setTimeout(() => {
+                setReasoningOpenMap((prev) => ({ ...prev, [phase]: false }))
+                setSearchOpen(true)
+                pendingOpenSearchRef.current = false
+              }, 350)
+            }
           }
-          setRunTrace((prev) => prev ? { ...prev, reasoning: [...prev.reasoning, reasoningBlock] } : prev)
         }
         else if (parsed.type === 'tool_calls') {
           // Model wants to call tools
@@ -139,7 +166,10 @@ export function ResponsePanel() {
           setRunTrace((prev) => prev ? { ...prev, tools: [...prev.tools, ...executions] } : prev)
         }
         else if (parsed.type === 'tool_executing') {
-          // Tool is being executed
+          // Tool is being executed — queue search panel until reasoning finishes (brief silence)
+          if ((parsed.category === 'search') || (typeof parsed.name === 'string' && parsed.name.toLowerCase().includes('search'))) {
+            pendingOpenSearchRef.current = true
+          }
           setRunTrace((prev) => {
             if (!prev) return prev
             const tools = prev.tools.map((t) => {
@@ -147,7 +177,13 @@ export function ResponsePanel() {
               const matchesId = parsed.id && t.id === parsed.id
               const matchesName = !parsed.id && t.name === parsed.name && (t.status === 'queued' || t.status === 'running')
               if (matchesId || matchesName) {
-                return { ...t, status: 'running' as const, startedAt: t.startedAt || nowIso() }
+                return { 
+                  ...t, 
+                  status: 'running' as const, 
+                  startedAt: t.startedAt || nowIso(),
+                  category: parsed.category || t.category,
+                  visibility: parsed.visibility || t.visibility,
+                }
               }
               return t
             })
@@ -175,25 +211,46 @@ export function ResponsePanel() {
                   links: extractLinks(parsed.result),
                   outputSummary: Array.isArray(parsed.result?.result?.results) ? `${parsed.result.result.results.length} results` : undefined,
                   error: succeeded ? null : { message: parsed.result?.error || 'Tool failed' },
+                  category: parsed.category || t.category,
+                  visibility: parsed.visibility || t.visibility,
                 }
               }
               return t
             })
             return { ...prev, tools }
           })
+          // Search finished: close search panel and prepare for next reasoning phase
+          if ((parsed.category === 'search') || (typeof parsed.name === 'string' && parsed.name.toLowerCase().includes('search'))) {
+            setSearchOpen(false)
+            const nextPhase = Math.max(0, ...Object.keys(reasoningTexts).map(Number)) + 1
+            nextReasoningPhaseRef.current = nextPhase
+          }
         }
         else if (parsed.type === 'content') {
           // Regular content
           appendResponse(parsed.content)
+          // Content implies reasoning has ended for current phase
+          setReasoningOpenMap((prev) => ({ ...prev, [reasoningPhase]: false }))
+          pendingOpenSearchRef.current = false
+          if (reasoningSilenceTimerRef.current) window.clearTimeout(reasoningSilenceTimerRef.current)
+          reasoningSilenceTimerRef.current = null
         }
         else if (parsed.type === 'done' || parsed.done) {
           // Stream complete
           setIsStreaming(false)
           setRunTrace((prev) => prev ? { ...prev, endedAt: nowIso() } : prev)
+          // Collapse any open reasoning blocks on completion (keep visible)
+          setReasoningOpenMap((prev) => Object.fromEntries(Object.keys(prev).map((k) => [Number(k), false])) as Record<number, boolean>)
+          pendingOpenSearchRef.current = false
+          if (reasoningSilenceTimerRef.current) window.clearTimeout(reasoningSilenceTimerRef.current)
+          reasoningSilenceTimerRef.current = null
           if (currentStream.current) {
             api.stopStream(currentStream.current)
             currentStream.current = null
           }
+        }
+        else if (parsed.type === 'warning') {
+          setWarning(parsed.message || 'Warning')
         }
         else if (parsed.type === 'error') {
           // Error occurred
@@ -285,6 +342,12 @@ export function ResponsePanel() {
         </div>
       </div>
       <div className="px-4 py-3 overflow-hidden">
+        {/* Warning banner */}
+        {warning && (
+          <div className="mb-3 rounded-md border border-amber-300 bg-amber-50 text-amber-900 dark:border-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-200 px-3 py-2 text-xs">
+            {warning}
+          </div>
+        )}
         {/* Tool Chips summary */}
         {runTrace?.tools?.length ? (
           <div className="mb-3 flex justify-end">
@@ -292,13 +355,56 @@ export function ResponsePanel() {
           </div>
         ) : null}
 
-        {/* Reasoning blocks (shown before search results) */}
-        {runTrace?.reasoning?.map((block, idx) => (
-          <ReasoningBlock key={block.id} content={block.content} index={idx} />
-        ))}
+        {/* Reasoning panels (phase 0) shown before Search; later phases after Search */}
+        {(() => {
+          const keys = Object.keys(reasoningTexts).map(Number).sort((a,b)=>a-b)
+          const pre = keys.filter((k) => k === 0)
+          const post = keys.filter((k) => k > 0)
+          return (
+            <>
+              {/* Pre-tool reasoning (phase 0) */}
+              {pre.map((phase) => {
+                const txt = reasoningTexts[phase]
+                const open = !!reasoningOpenMap[phase]
+                const isActive = isStreaming && reasoningEffort && phase === reasoningPhase
+                return (
+                  <ReasoningBlock
+                    key={`reasoning-pre-${phase}`}
+                    content={txt}
+                    isStreaming={Boolean(isActive)}
+                    open={open}
+                    onToggle={() => setReasoningOpenMap((m) => ({ ...m, [phase]: !m[phase] }))}
+                  />
+                )
+              })}
 
-        {/* Search results preview (T3-style) */}
-        <SearchResultsInline run={runTrace} />
+              {/* Search results preview (T3-style) */}
+              <SearchResultsInline
+                run={runTrace}
+                open={searchOpen}
+                onOpenChange={setSearchOpen}
+                isRunning={Boolean(runTrace?.tools?.some(t => (t.status === 'running') && ((t.category === 'search') || t.name.toLowerCase().includes('search'))))}
+              />
+
+              {/* Post-tool reasoning (phase > 0) */}
+              {post.map((phase) => {
+                const txt = reasoningTexts[phase]
+                const open = !!reasoningOpenMap[phase]
+                const isActive = isStreaming && reasoningEffort && phase === reasoningPhase
+                return (
+                  <ReasoningBlock
+                    key={`reasoning-post-${phase}`}
+                    content={txt}
+                    isStreaming={Boolean(isActive)}
+                    open={open}
+                    onToggle={() => setReasoningOpenMap((m) => ({ ...m, [phase]: !m[phase] }))}
+                  />
+                )
+              })}
+
+            </>
+          )
+        })()}
 
         {/* Response Content */}
         <div className="prose prose-sm dark:prose-invert max-w-none break-words" aria-live="polite">
