@@ -3,6 +3,7 @@ import datetime as dt
 import json
 import os
 import re
+from dataclasses import dataclass, field
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
@@ -122,6 +123,37 @@ def _tool_metadata(name: str) -> dict:
     return {"category": "other", "visibility": "secondary"}
 
 
+# Minimal conversation context for clarity and future refactors
+@dataclass
+class ConversationContext:
+    model: str
+    messages: list[dict] = field(default_factory=list)
+    base_params: dict = field(default_factory=dict)
+    tool_schemas: list[dict] | None = None
+    tool_names: set[str] = field(default_factory=set)
+    provider_id: str = ""
+    tool_loop_v2: bool = False
+
+
+def content_to_text(content) -> str:
+    try:
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts = []
+            for block in content:
+                if (
+                    isinstance(block, dict)
+                    and block.get("type") == "text"
+                    and isinstance(block.get("text"), str)
+                ):
+                    parts.append(block.get("text", ""))
+            return "\n".join([p for p in parts if p])
+    except Exception:
+        pass
+    return ""
+
+
 @router.get("/stream")
 async def stream_chat(
     model: str = Query(..., description="Model ID to use"),
@@ -231,24 +263,7 @@ async def stream_chat(
         svc = OpenRouterService()
         tool_executor = ToolExecutor() if parsed_tool_schemas else None
 
-        def _content_to_text(content) -> str:
-            try:
-                if isinstance(content, str):
-                    return content
-                if isinstance(content, list):
-                    parts = []
-                    for block in content:
-                        if (
-                            isinstance(block, dict)
-                            and block.get("type") == "text"
-                            and isinstance(block.get("text"), str)
-                        ):
-                            parts.append(block.get("text", ""))
-                    return "\n".join([p for p in parts if p])
-            except Exception:
-                pass
-            return ""
-
+        # Base request parameters
         params = {"temperature": temperature, "top_p": top_p}
         if effective_max_tokens is not None:
             params["max_tokens"] = effective_max_tokens
@@ -303,6 +318,17 @@ async def stream_chat(
             with contextlib.suppress(Exception):
                 params["logit_bias"] = json.loads(logit_bias)
 
+        # Establish conversation context (lightweight; behavior unchanged)
+        context = ConversationContext(
+            model=model,
+            messages=messages,
+            base_params=params,
+            tool_schemas=parsed_tool_schemas,
+            tool_names=tool_names,
+            provider_id=_provider_id_from_model(model),
+            tool_loop_v2=tool_loop_v2,
+        )
+
         try:
             # Per-turn search dedupe/clamp (V2 only)
             search_cache: dict[str, dict] = {}
@@ -317,7 +343,7 @@ async def stream_chat(
                 while iteration < limit:
                     iteration += 1
 
-                    call_params = params.copy()
+                    call_params = context.base_params.copy()
                     call_params["tools"] = parsed_tool_schemas
                     wants_search = "search_web" in tool_names
                     prompt_lower = (prompt or "").lower()
@@ -353,7 +379,7 @@ async def stream_chat(
                             "auto" if tool_choice != "none" else "none"
                         )
 
-                    provider_prefix = _provider_id_from_model(model)
+                    provider_prefix = context.provider_id
                     skip_forced_tool_choice = provider_prefix in {"xai"}
 
                     if (
@@ -370,7 +396,7 @@ async def stream_chat(
                         should_force_tools_first_turn = True
 
                     # Provider guardrails
-                    provider_prefix = _provider_id_from_model(model)
+                    provider_prefix = context.provider_id
                     if provider_prefix in {"anthropic", "xai"}:
                         call_params["parallel_tool_calls"] = False
 
@@ -380,7 +406,7 @@ async def stream_chat(
                         assistant_tool_msg = {"role": "assistant", "tool_calls": []}
                         completed_call: dict | None = None
                         # Stream events until we either see a completed tool call or the content finishes
-                        async for ev in svc.stream_events(model=model, messages=messages, **call_params):
+                        async for ev in svc.stream_events(model=context.model, messages=context.messages, **call_params):
                             et = ev.get("type")
                             if et == "reasoning":
                                 yield f"data: {json.dumps({'type': 'reasoning', 'content': ev.get('content', '')})}\n\n"
@@ -495,12 +521,12 @@ async def stream_chat(
 
                             finalize_success = False
                             try:
-                                finalize_params = params.copy()
+                                finalize_params = context.base_params.copy()
                                 finalize_params["tools"] = parsed_tool_schemas
                                 finalize_params["tool_choice"] = "none"
-                                finalize_response = await svc.completion(model=model, messages=messages, **finalize_params)
+                                finalize_response = await svc.completion(model=context.model, messages=messages, **finalize_params)
                                 finalize_message = finalize_response.get("choices", [{}])[0].get("message", {})
-                                finalize_content = _content_to_text(finalize_message.get("content", ""))
+                                finalize_content = content_to_text(finalize_message.get("content", ""))
                                 if finalize_content:
                                     yield f"data: {json.dumps({'type': 'content', 'content': finalize_content})}\n\n"
                                     finalize_success = True
@@ -511,8 +537,8 @@ async def stream_chat(
 
                             if not finalize_success:
                                 try:
-                                    stream_params = params.copy()
-                                    async for chunk in svc.stream_completion(model=model, messages=messages, **stream_params):
+                                    stream_params = context.base_params.copy()
+                                    async for chunk in svc.stream_completion(model=context.model, messages=messages, **stream_params):
                                         yield f"data: {json.dumps({'type': 'content', 'content': chunk})}\n\n"
                                         sent_any_content = True
                                     break
@@ -530,7 +556,7 @@ async def stream_chat(
                                 break
                     else:
                         response = await svc.completion(
-                            model=model, messages=messages, **call_params
+                            model=context.model, messages=messages, **call_params
                         )
                         message = response.get("choices", [{}])[0].get("message", {})
 
@@ -674,18 +700,18 @@ async def stream_chat(
 
                             finalize_success = False
                             try:
-                                finalize_params = params.copy()
+                                finalize_params = context.base_params.copy()
                                 finalize_params["tools"] = parsed_tool_schemas
                                 finalize_params["tool_choice"] = "none"
 
                                 finalize_response = await svc.completion(
-                                    model=model, messages=messages, **finalize_params
+                                    model=context.model, messages=messages, **finalize_params
                                 )
 
                                 finalize_message = finalize_response.get("choices", [{}])[
                                     0
                                 ].get("message", {})
-                                finalize_content = _content_to_text(
+                                finalize_content = content_to_text(
                                     finalize_message.get("content", "")
                                 )
 
@@ -699,8 +725,8 @@ async def stream_chat(
 
                             if not finalize_success:
                                 try:
-                                    stream_params = params.copy()
-                                    async for ev in svc.stream_events(model=model, messages=messages, **stream_params):
+                                    stream_params = context.base_params.copy()
+                                    async for ev in svc.stream_events(model=context.model, messages=messages, **stream_params):
                                         et = ev.get("type")
                                         if et == "reasoning":
                                             yield f"data: {json.dumps({'type': 'reasoning', 'content': ev.get('content', '')})}\n\n"
@@ -720,7 +746,7 @@ async def stream_chat(
                                 sent_any_content = True
                             break
                         else:
-                            content = _content_to_text(message.get("content", ""))
+                            content = content_to_text(message.get("content", ""))
                             any_tools_executed = any(
                                 True for msg in messages if msg.get("role") == "tool"
                             )

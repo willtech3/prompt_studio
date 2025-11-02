@@ -231,6 +231,8 @@ export function ResponsePanel() {
           appendResponse(parsed.content)
           // Content implies reasoning has ended for current phase
           setReasoningOpenMap((prev) => ({ ...prev, [reasoningPhase]: false }))
+          // Auto-collapse search panel once main response starts
+          setSearchOpen(false)
           pendingOpenSearchRef.current = false
           if (reasoningSilenceTimerRef.current) window.clearTimeout(reasoningSilenceTimerRef.current)
           reasoningSilenceTimerRef.current = null
