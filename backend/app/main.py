@@ -42,7 +42,6 @@ async def _ensure_db_tables() -> None:
         await create_all()
 
 
-# Register placeholder routers (no behavior changes)
 app.include_router(chat_routes.router)
 app.include_router(model_routes.router)
 app.include_router(provider_routes.router)
