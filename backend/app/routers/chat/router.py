@@ -349,7 +349,8 @@ async def stream_chat(
                 return
 
         # Auto-inject search if needed
-        prompt_implies_recency = should_auto_inject_search(prompt, bool(parsed_tools))
+        # Note: Check recency independently of tools to preserve force-search logic
+        prompt_implies_recency = should_auto_inject_search(prompt, has_tools=False)
         if not parsed_tools and prompt_implies_recency:
             parsed_tools = [create_search_tool_schema()]
             tool_names = {"search_web"}
