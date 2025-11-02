@@ -21,7 +21,12 @@ import httpx
 
 
 class ToolExecutor:
-    """Execute safe, predefined tools for prompt testing."""
+    """Execute safe, predefined tools for prompt testing.
+
+    For web search we standardize on Brave Search only for consistency across
+    all models/providers. DuckDuckGo fallback has been removed to ensure
+    identical behavior and result quality regardless of provider.
+    """
 
     def __init__(self):
         """Initialize tool executor with available tools."""
@@ -150,17 +155,14 @@ class ToolExecutor:
 
     async def _search_web(self, query: str, num_results: int = 3, time_hint: str | None = None, after: str | None = None, before: str | None = None) -> dict:
         """
-        Search the web using DuckDuckGo Instant Answer API.
-        
-        This is a free, no-auth-required API that provides instant answers and web results.
-        For production, consider using Brave Search API, Perplexity, or SerpAPI.
-        
+        Search the web using Brave Search API (uniform across all models).
+
         Args:
             query: Search query string
             num_results: Number of results to return (1-5)
-            
+
         Returns:
-            Dictionary with search results
+            Dictionary with search results, or an error message when misconfigured.
         """
         # Validate inputs
         if not query or not query.strip():
@@ -170,74 +172,42 @@ class ToolExecutor:
 
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                # Prefer Brave Search API when available for higher-quality results
-                if self.brave_key:
-                    freshness_map = {"day": "pd", "week": "pw", "month": "pm", "year": "py"}
-                    params = {
-                        "q": query,
-                        "count": max(1, min(5, num_results)),
+                if not self.brave_key:
+                    return {
+                        "error": "BRAVE_API_KEY is not set. Configure BRAVE_API_KEY to enable web search.",
+                        "query": query,
                     }
-                    if time_hint in freshness_map:
-                        params["freshness"] = freshness_map[time_hint]
-                    r = await client.get(
-                        "https://api.search.brave.com/res/v1/web/search",
-                        params=params,
-                        headers={
-                            "Accept": "application/json",
-                            "X-Subscription-Token": self.brave_key,
-                        },
-                    )
-                    r.raise_for_status()
-                    data = r.json()
-                    web = (data or {}).get("web", {})
-                    results_json = web.get("results", []) or []
-                    results = []
-                    for item in results_json[:num_results]:
-                        url = item.get("url", "")
-                        results.append({
-                            "title": item.get("title") or url,
-                            "snippet": item.get("snippet") or item.get("description", ""),
-                            "url": url,
-                            "source": (httpx.URL(url).host if url else "Brave"),
-                        })
-                    return {"query": query, "num_results": len(results), "results": results, "provider": "brave"}
 
-                # Fallback: DuckDuckGo Instant Answer (fast but not always rich)
-                response = await client.get(
-                    "https://api.duckduckgo.com/",
-                    params={
-                        "q": query,
-                        "format": "json",
-                        "no_html": 1,
-                        "skip_disambig": 1
-                    }
+                freshness_map = {"day": "pd", "week": "pw", "month": "pm", "year": "py"}
+                params = {
+                    "q": query,
+                    "count": max(1, min(5, num_results)),
+                }
+                if time_hint in freshness_map:
+                    params["freshness"] = freshness_map[time_hint]
+
+                r = await client.get(
+                    "https://api.search.brave.com/res/v1/web/search",
+                    params=params,
+                    headers={
+                        "Accept": "application/json",
+                        "X-Subscription-Token": self.brave_key,
+                    },
                 )
-                response.raise_for_status()
-                data = response.json()
+                r.raise_for_status()
+                data = r.json()
+                web = (data or {}).get("web", {})
+                results_json = web.get("results", []) or []
                 results = []
-                if data.get("AbstractText"):
+                for item in results_json[:num_results]:
+                    url = item.get("url", "")
                     results.append({
-                        "title": data.get("Heading", query),
-                        "snippet": data.get("AbstractText", ""),
-                        "url": data.get("AbstractURL", ""),
-                        "source": data.get("AbstractSource", "DuckDuckGo")
+                        "title": item.get("title") or url,
+                        "snippet": item.get("snippet") or item.get("description", ""),
+                        "url": url,
+                        "source": (httpx.URL(url).host if url else "Brave"),
                     })
-                for topic in data.get("RelatedTopics", [])[:num_results - len(results)]:
-                    if isinstance(topic, dict) and "Text" in topic:
-                        results.append({
-                            "title": topic.get("Text", "")[:100],
-                            "snippet": topic.get("Text", ""),
-                            "url": topic.get("FirstURL", ""),
-                            "source": "DuckDuckGo"
-                        })
-                if not results:
-                    results = [{
-                        "title": "No instant results found",
-                        "snippet": f"DuckDuckGo did not return instant answers for '{query}'.",
-                        "url": f"https://duckduckgo.com/?q={query}",
-                        "source": "DuckDuckGo"
-                    }]
-                return {"query": query, "num_results": len(results), "results": results[:num_results], "provider": "duckduckgo"}
+                return {"query": query, "num_results": len(results), "results": results, "provider": "brave"}
 
         except httpx.HTTPError as e:
             return {

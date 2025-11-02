@@ -267,6 +267,41 @@ async def stream_chat(
             search_clamp_limit = 6
             clamp_warning_sent = False
 
+            # Determine if the prompt implies recency and we should use web search.
+            prompt_lower = (prompt or "").lower()
+            text_implies_recency = (
+                any(k in prompt_lower for k in [
+                    "news", "latest", "recent", "current", "last ", "past ", "look up", "search"
+                ])
+                or bool(parse_time_constraints(f"{system or ''} {prompt}"))
+            )
+
+            # If no tools were provided by the client but recency is implied,
+            # auto-inject a minimal search_web schema and enable the tool executor.
+            if (not parsed_tool_schemas) and text_implies_recency:
+                parsed_tool_schemas = [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "search_web",
+                            "description": "Search the web for current information. Returns top results with titles, snippets, and URLs.",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "query": {"type": "string", "description": "The search query to look up"},
+                                    "num_results": {"type": "integer", "description": "Number of results (1-5)", "default": 3},
+                                    "time_hint": {"type": "string", "enum": ["day","week","month","year"], "description": "Freshness hint"},
+                                    "after": {"type": "string", "description": "YYYY-MM-DD"},
+                                    "before": {"type": "string", "description": "YYYY-MM-DD"}
+                                },
+                                "required": ["query"]
+                            }
+                        }
+                    }
+                ]
+                tool_executor = ToolExecutor()
+                tool_names = {"search_web"}
+
             if parsed_tool_schemas and tool_executor:
                 iteration = 0
                 limit = max_tool_calls or 20
@@ -276,24 +311,7 @@ async def stream_chat(
                     call_params = params.copy()
                     call_params["tools"] = parsed_tool_schemas
                     wants_search = "search_web" in tool_names
-                    prompt_lower = (prompt or "").lower()
-                    implies_needs_tools = wants_search and (
-                        any(
-                            k in prompt_lower
-                            for k in [
-                                "news",
-                                "latest",
-                                "recent",
-                                "current",
-                                "last ",
-                                "past ",
-                                "find",
-                                "look up",
-                                "search",
-                            ]
-                        )
-                        or bool(parse_time_constraints(f"{system or ''} {prompt}"))
-                    )
+                    implies_needs_tools = wants_search and text_implies_recency
 
                     if tool_choice and tool_choice not in ("auto", "none"):
                         if tool_choice in tool_names:
