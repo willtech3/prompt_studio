@@ -100,7 +100,7 @@ def build_tool_call_from_delta(builder: dict[str, Any]) -> dict[str, Any] | None
         # Validate JSON arguments
         json.loads(builder["arguments"])
         return {
-            "id": builder.get("id") or f"call_generated",
+            "id": builder.get("id") or "call_generated",
             "name": builder["name"],
             "arguments": builder["arguments"]
         }
@@ -121,41 +121,3 @@ def parse_tool_arguments(arguments_str: str) -> dict[str, Any]:
         return json.loads(arguments_str)
     except json.JSONDecodeError:
         return {}
-
-
-def should_force_initial_search(
-    iteration: int,
-    prompt_implies_recency: bool,
-    has_search_tool: bool,
-    tool_choice: str | dict[str, Any],
-    provider: str
-) -> bool:
-    """Determine if search should be forced on first iteration.
-
-    Args:
-        iteration: Current iteration number (1-based)
-        prompt_implies_recency: Whether prompt implies need for recent info
-        has_search_tool: Whether search_web tool is available
-        tool_choice: Current tool choice setting
-        provider: Provider ID
-
-    Returns:
-        True if search should be forced
-    """
-    # Only force on first iteration
-    if iteration != 1:
-        return False
-
-    # Only if prompt implies recency and search is available
-    if not (prompt_implies_recency and has_search_tool):
-        return False
-
-    # Only if tool choice is auto (not already forced)
-    if tool_choice != "auto":
-        return False
-
-    # Skip for providers with known issues
-    if provider in {"xai"}:
-        return False
-
-    return True
