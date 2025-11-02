@@ -1,3 +1,4 @@
+import contextlib
 import json
 import os
 
@@ -28,15 +29,11 @@ def test_chat_stream_smoke(client):
         # Optionally check that at least one parseable JSON payload has an expected type
         parsed = []
         for d in lines:
-            try:
+            with contextlib.suppress(Exception):
                 parsed.append(json.loads(d))
-            except Exception:
-                pass
         if parsed:
             assert any(
                 p.get("type") in {"content", "reasoning", "tool_calls", "done"}
                 for p in parsed
                 if isinstance(p, dict)
             )
-
-
