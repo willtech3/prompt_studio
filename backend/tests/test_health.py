@@ -4,5 +4,3 @@ def test_health_reports_status_and_db_flag(client):
     data = resp.json()
     assert data.get("status") == "healthy"
     assert isinstance(data.get("db"), bool)
-
-

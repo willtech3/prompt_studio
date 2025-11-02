@@ -1,4 +1,5 @@
 import asyncio
+
 import pytest
 from sqlalchemy import text
 
@@ -32,5 +33,3 @@ def test_models_list_shape(client):
         m = payload["data"][0]
         assert isinstance(m, dict)
         assert ("id" in m) or ("name" in m)
-
-
