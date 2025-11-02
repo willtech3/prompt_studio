@@ -1,8 +1,6 @@
 import contextlib
-import datetime as dt
 import json
 import os
-import re
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
@@ -25,97 +23,16 @@ def _provider_id_from_model(model_id: str | None) -> str:
         return ""
 
 
-def parse_time_constraints(text: str) -> dict | None:
-    """Extract time constraints from prompt text and map to freshness period.
-
-    Returns a dict possibly containing:
-      - time_hint: 'day'|'week'|'month'|'year' (based on actual time range)
-      - after: 'YYYY-MM-DD'
-      - before: 'YYYY-MM-DD'
-      - days_ago: int (actual number of days)
-    """
-    try:
-        text_l = (text or "").lower()
-        now = dt.datetime.utcnow()
-
-        def get_time_hint_from_days(days: int) -> str:
-            if days <= 1:
-                return "day"
-            elif days <= 7:
-                return "week"
-            elif days <= 30:
-                return "month"
-            else:
-                return "year"
-
-        if re.search(r"\btoday\b", text_l):
-            return {
-                "time_hint": "day",
-                "after": now.strftime("%Y-%m-%d"),
-                "days_ago": 1,
-            }
-        if re.search(r"\byesterday\b", text_l):
-            d = (now - dt.timedelta(days=1)).strftime("%Y-%m-%d")
-            return {"time_hint": "day", "after": d, "days_ago": 1}
-        if re.search(r"\bthis\s+week\b", text_l):
-            start = (now - dt.timedelta(days=now.weekday())).strftime("%Y-%m-%d")
-            return {"time_hint": "week", "after": start, "days_ago": 7}
-        if re.search(r"\blast\s+week\b", text_l):
-            start = (now - dt.timedelta(days=now.weekday() + 7)).strftime("%Y-%m-%d")
-            return {"time_hint": "week", "after": start, "days_ago": 7}
-        if re.search(r"\bthis\s+month\b", text_l):
-            start = now.replace(day=1).strftime("%Y-%m-%d")
-            return {"time_hint": "month", "after": start, "days_ago": 30}
-        if re.search(r"\blast\s+month\b", text_l):
-            first_this = now.replace(day=1)
-            last_month_end = first_this - dt.timedelta(days=1)
-            start = last_month_end.replace(day=1).strftime("%Y-%m-%d")
-            return {"time_hint": "month", "after": start, "days_ago": 30}
-
-        m = re.search(
-            r"\b(last|past|in\s+the\s+last)\s+(\d{1,3})\s+(day|days|week|weeks|month|months|year|years)\b",
-            text_l,
-        )
-        if m:
-            n = int(m.group(2))
-            unit = m.group(3)
-            if "day" in unit:
-                days = n
-                delta = dt.timedelta(days=days)
-            elif "week" in unit:
-                days = n * 7
-                delta = dt.timedelta(days=days)
-            elif "month" in unit:
-                days = n * 30
-                delta = dt.timedelta(days=days)
-            else:  # year
-                days = n * 365
-                delta = dt.timedelta(days=days)
-
-            time_hint = get_time_hint_from_days(days)
-            return {
-                "time_hint": time_hint,
-                "after": (now - delta).strftime("%Y-%m-%d"),
-                "days_ago": days,
-            }
-    except Exception:
-        return None
-    return None
-
-
 def _tool_metadata(name: str) -> dict:
     """Return metadata for tool visibility and categorization.
 
     - search_web: category=search, visibility=primary
-    - get_current_time, calculate: category=utility, visibility=hidden
     - default: category=other, visibility=secondary
     """
     try:
         n = (name or "").lower()
         if n == "search_web":
             return {"category": "search", "visibility": "primary"}
-        if n in {"get_current_time", "calculate"}:
-            return {"category": "utility", "visibility": "hidden"}
     except Exception:
         pass
     return {"category": "other", "visibility": "secondary"}
@@ -267,6 +184,39 @@ async def stream_chat(
             search_clamp_limit = 6
             clamp_warning_sent = False
 
+            # Determine if the prompt implies recency and we should use web search.
+            prompt_lower = (prompt or "").lower()
+            text_implies_recency = any(k in prompt_lower for k in [
+                "news", "latest", "recent", "current", "last ", "past ", "look up", "search",
+                "today", "yesterday", "this week", "last week", "this month", "last month"
+            ])
+
+            # If no tools were provided by the client but recency is implied,
+            # auto-inject a minimal search_web schema and enable the tool executor.
+            if (not parsed_tool_schemas) and text_implies_recency:
+                parsed_tool_schemas = [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "search_web",
+                            "description": "Search the web for current information. Returns top results with titles, snippets, and URLs.",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "query": {"type": "string", "description": "The search query to look up"},
+                                    "num_results": {"type": "integer", "description": "Number of results (1-5)", "default": 3},
+                                    "time_hint": {"type": "string", "enum": ["day","week","month","year"], "description": "Freshness hint"},
+                                    "after": {"type": "string", "description": "YYYY-MM-DD"},
+                                    "before": {"type": "string", "description": "YYYY-MM-DD"}
+                                },
+                                "required": ["query"]
+                            }
+                        }
+                    }
+                ]
+                tool_executor = ToolExecutor()
+                tool_names = {"search_web"}
+
             if parsed_tool_schemas and tool_executor:
                 iteration = 0
                 limit = max_tool_calls or 20
@@ -276,24 +226,7 @@ async def stream_chat(
                     call_params = params.copy()
                     call_params["tools"] = parsed_tool_schemas
                     wants_search = "search_web" in tool_names
-                    prompt_lower = (prompt or "").lower()
-                    implies_needs_tools = wants_search and (
-                        any(
-                            k in prompt_lower
-                            for k in [
-                                "news",
-                                "latest",
-                                "recent",
-                                "current",
-                                "last ",
-                                "past ",
-                                "find",
-                                "look up",
-                                "search",
-                            ]
-                        )
-                        or bool(parse_time_constraints(f"{system or ''} {prompt}"))
-                    )
+                    implies_needs_tools = wants_search and text_implies_recency
 
                     if tool_choice and tool_choice not in ("auto", "none"):
                         if tool_choice in tool_names:
@@ -395,18 +328,6 @@ async def stream_chat(
                             func_args = json.loads(func_args_str)
                         except json.JSONDecodeError:
                             func_args = {}
-
-                        if func_name == "search_web":
-                            try:
-                                hint = parse_time_constraints(f"{system or ''} \n {prompt}")
-                                if hint:
-                                    for k in ("time_hint", "after", "before"):
-                                        if k not in func_args:
-                                            v = hint.get(k)
-                                            if v:
-                                                func_args[k] = v
-                            except Exception:
-                                pass
 
                         meta = _tool_metadata(func_name)
                         yield f"data: {json.dumps({'type': 'tool_executing', 'id': completed_call['id'], 'name': func_name, 'category': meta.get('category'), 'visibility': meta.get('visibility')})}\n\n"
