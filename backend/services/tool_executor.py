@@ -53,8 +53,8 @@ class ToolExecutor:
                             },
                             "num_results": {
                                 "type": "integer",
-                                "description": "Number of results to return (1-5)",
-                                "default": 3
+                                "description": "Number of results to return (5-10)",
+                                "default": 10
                             }
                         },
                         "required": ["query"]
@@ -112,13 +112,60 @@ class ToolExecutor:
                 "error": f"Tool '{tool_name}' failed: {str(e)}"
             }
 
+    async def _fetch_rich_data(self, client: httpx.AsyncClient, callback_key: str) -> dict | None:
+        """Fetch rich structured data from Brave API callback endpoint."""
+        try:
+            response = await client.get(
+                "https://api.search.brave.com/res/v1/web/rich",
+                params={"callback_key": callback_key},
+                headers={
+                    "Accept": "application/json",
+                    "X-Subscription-Token": self.brave_key,
+                },
+            )
+            return response.json() if response.status_code == 200 else None
+        except Exception:
+            return None
+
+    def _extract_web_result(self, item: dict) -> dict:
+        """Extract and enrich a single web search result."""
+        url = item.get("url", "")
+        result = {
+            "title": item.get("title") or url,
+            "description": item.get("description", ""),
+            "url": url,
+            "source": (httpx.URL(url).host if url else "Brave"),
+        }
+
+        # Add optional metadata fields
+        if item.get("thumbnail"):
+            result["thumbnail"] = item["thumbnail"].get("src")
+
+        if item.get("location"):
+            loc = item["location"]
+            result["location"] = {
+                "coordinates": loc.get("coordinates"),
+                "address": loc.get("postal_address", {}).get("displayAddress"),
+            }
+
+        if item.get("profile"):
+            result["publisher"] = item["profile"].get("name")
+
+        if item.get("language"):
+            result["language"] = item["language"]
+
+        if item.get("subtype"):
+            result["type"] = item["subtype"]
+
+        return result
+
     async def _search_web(
         self,
         query: str,
         num_results: int = 10,
-        time_hint: str | None = None,
-        after: str | None = None,
-        before: str | None = None
+        _time_hint: str | None = None,
+        _after: str | None = None,
+        _before: str | None = None
     ) -> dict:
         """
         Search the web using Brave Search API (uniform across all models).
@@ -126,20 +173,18 @@ class ToolExecutor:
         Args:
             query: Search query string
             num_results: Number of results to return (1-5)
-            time_hint: Ignored - kept for compatibility with model calls
-            after: Ignored - kept for compatibility with model calls
-            before: Ignored - kept for compatibility with model calls
+            _time_hint: Ignored - kept for compatibility with model calls
+            _after: Ignored - kept for compatibility with model calls
+            _before: Ignored - kept for compatibility with model calls
 
         Returns:
             Dictionary with search results, or an error message when misconfigured.
         """
-        # Note: time_hint, after, before are accepted but ignored
-        # They were too restrictive and caused 0 results for many queries
-        # Validate inputs
+        # Note: _time_hint, _after, _before are accepted but ignored
         if not query or not query.strip():
             return {"error": "Query cannot be empty"}
 
-        num_results = max(1, min(5, num_results))  # Clamp to 1-5
+        num_results = max(1, min(5, num_results))
 
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -149,97 +194,48 @@ class ToolExecutor:
                         "query": query,
                     }
 
-                # Enable rich search callbacks for structured data (weather, stocks, sports, etc.)
-                params = {
-                    "q": query,
-                    "count": max(1, min(5, num_results)),
-                    "enable_rich_callback": "1",
-                }
-
-                r = await client.get(
+                # Fetch search results with rich callback enabled
+                response = await client.get(
                     "https://api.search.brave.com/res/v1/web/search",
-                    params=params,
+                    params={
+                        "q": query,
+                        "count": num_results,
+                        "enable_rich_callback": "1",
+                    },
                     headers={
                         "Accept": "application/json",
                         "X-Subscription-Token": self.brave_key,
                     },
                 )
-                r.raise_for_status()
-                data = r.json()
+                response.raise_for_status()
+                data = response.json()
 
-                # Check if rich data is available (weather, stocks, sports, calculator, etc.)
+                # Fetch rich data if available (weather, stocks, sports, calculator, etc.)
                 rich_data = None
                 if "rich" in data and "hint" in data["rich"]:
                     callback_key = data["rich"]["hint"].get("callback_key")
-
                     if callback_key:
-                        # Fetch rich data from callback endpoint
-                        rich_response = await client.get(
-                            "https://api.search.brave.com/res/v1/web/rich",
-                            params={"callback_key": callback_key},
-                            headers={
-                                "Accept": "application/json",
-                                "X-Subscription-Token": self.brave_key,
-                            },
-                        )
-                        if rich_response.status_code == 200:
-                            rich_data = rich_response.json()
+                        rich_data = await self._fetch_rich_data(client, callback_key)
 
-                # Extract standard web results
-                web = (data or {}).get("web", {})
+                # Extract and enrich web results
+                web = data.get("web", {})
                 results_json = web.get("results", []) or []
-                results = []
-                for item in results_json[:num_results]:
-                    url = item.get("url", "")
-                    result = {
-                        "title": item.get("title") or url,
-                        "description": item.get("description", ""),
-                        "url": url,
-                        "source": (httpx.URL(url).host if url else "Brave"),
-                    }
+                results = [self._extract_web_result(item) for item in results_json[:num_results]]
 
-                    # Add extra data fields if available
-                    if item.get("thumbnail"):
-                        result["thumbnail"] = item["thumbnail"].get("src")
-
-                    if item.get("location"):
-                        loc = item["location"]
-                        result["location"] = {
-                            "coordinates": loc.get("coordinates"),
-                            "address": loc.get("postal_address", {}).get("displayAddress"),
-                        }
-
-                    if item.get("profile"):
-                        result["publisher"] = item["profile"].get("name")
-
-                    # Add language and type metadata
-                    if item.get("language"):
-                        result["language"] = item["language"]
-                    if item.get("subtype"):
-                        result["type"] = item["subtype"]
-
-                    results.append(result)
-
-                response = {
+                # Build response
+                response_data = {
                     "query": query,
                     "num_results": len(results),
                     "results": results,
                     "provider": "brave"
                 }
 
-                # Include rich data if available (weather, stocks, sports, calculator, etc.)
                 if rich_data:
-                    response["rich"] = rich_data
+                    response_data["rich"] = rich_data
 
-                return response
+                return response_data
 
         except httpx.HTTPError as e:
-            return {
-                "error": f"Search failed: {str(e)}",
-                "query": query
-            }
+            return {"error": f"Search failed: {str(e)}", "query": query}
         except Exception as e:
-            return {
-                "error": f"Unexpected error during search: {str(e)}",
-                "query": query
-            }
+            return {"error": f"Unexpected error during search: {str(e)}", "query": query}
