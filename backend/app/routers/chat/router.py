@@ -31,7 +31,6 @@ from .providers import (
     get_provider_id,
     get_tool_choice_override,
 )
-from .search import SearchTracker
 from .streaming import (
     stream_content_event,
     stream_done_event,
@@ -126,34 +125,6 @@ async def stream_until_tool_call(
     return completed_call, content_sent, yielded_events
 
 
-async def execute_tool_with_search_tracking(
-    executor: ToolExecutor,
-    tool_name: str,
-    arguments: dict[str, Any],
-    search_tracker: SearchTracker
-) -> dict[str, Any]:
-    """Execute a tool with search deduplication."""
-    if tool_name == "search_web":
-        # Check cache and clamp
-        cached_or_error, should_warn = search_tracker.get_or_clamp(arguments)
-
-        if should_warn:
-            # Will yield warning in main flow
-            pass
-
-        if cached_or_error:
-            return cached_or_error
-
-        # Execute search
-        result = await executor.execute(tool_name, arguments)
-
-        # Cache successful result
-        search_tracker.cache_result(arguments, result)
-        return result
-    else:
-        return await executor.execute(tool_name, arguments)
-
-
 async def finalize_response(
     svc: OpenRouterService,
     model: str,
@@ -200,7 +171,6 @@ async def execute_with_tools(
 ) -> AsyncGenerator[str]:
     """Execute chat with tool calling support."""
     executor = ToolExecutor()
-    search_tracker = SearchTracker()
     provider = get_provider_id(model)
     iteration = 0
 
@@ -252,21 +222,8 @@ async def execute_with_tools(
             meta["category"], meta["visibility"]
         )
 
-        # Handle search with deduplication
-        if func_name == "search_web":
-            cached_or_error, should_warn = search_tracker.get_or_clamp(func_args)
-            if should_warn:
-                yield stream_warning_event(
-                    f"Trimmed tool calls to {search_tracker.clamp_limit}",
-                    "TOOL_CLAMP"
-                )
-            if cached_or_error:
-                result = cached_or_error
-            else:
-                result = await executor.execute(func_name, func_args)
-                search_tracker.cache_result(func_args, result)
-        else:
-            result = await executor.execute(func_name, func_args)
+        # Execute tool directly - trust model to not spam identical queries
+        result = await executor.execute(func_name, func_args)
 
         yield stream_tool_result_event(
             completed_call["id"], func_name, result,

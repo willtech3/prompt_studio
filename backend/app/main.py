@@ -51,6 +51,8 @@ app.include_router(optimize_routes.router)
 
 @app.get("/health")
 async def health():
+    import os
     # also report DB availability
     db_ready = init_engine() is not None
-    return {"status": "healthy", "db": db_ready}
+    brave_key_set = bool(os.getenv("BRAVE_API_KEY"))
+    return {"status": "healthy", "db": db_ready, "brave_api_key_set": brave_key_set}
