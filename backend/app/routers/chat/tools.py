@@ -39,8 +39,8 @@ def create_search_tool_schema() -> dict[str, Any]:
                     },
                     "num_results": {
                         "type": "integer",
-                        "description": "Number of results to return (1-5)",
-                        "default": 3
+                        "description": "Number of results to return (1-10)",
+                        "default": 10
                     }
                 },
                 "required": ["query"]

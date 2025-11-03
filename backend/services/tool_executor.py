@@ -132,14 +132,14 @@ class ToolExecutor:
     async def _search_web(
         self,
         query: str,
-        num_results: int = 3
+        num_results: int = 10
     ) -> dict:
         """
         Search the web using Brave Search API (uniform across all models).
 
         Args:
             query: Search query string
-            num_results: Number of results to return (1-5, default 3)
+            num_results: Number of results to return (1-10, default 10)
 
         Returns:
             Dictionary with search results and optional rich data, or an error message.
@@ -147,7 +147,7 @@ class ToolExecutor:
         if not query or not query.strip():
             return {"error": "Query cannot be empty"}
 
-        num_results = max(1, min(5, num_results))
+        num_results = max(1, min(10, num_results))
 
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -162,7 +162,7 @@ class ToolExecutor:
                     "https://api.search.brave.com/res/v1/web/search",
                     params={
                         "q": query,
-                        "count": num_results,  # Already clamped to 1-5 above
+                        "count": num_results,  # Already clamped to 1-10 above
                         "enable_rich_callback": "1",
                     },
                     headers={
