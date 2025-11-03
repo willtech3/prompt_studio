@@ -32,36 +32,6 @@ class ToolExecutor:
         self.timeout = 7.5  # trade a bit more latency for better results
         self.brave_key = os.getenv("BRAVE_API_KEY")
 
-    def get_available_tools(self) -> list[dict]:
-        """
-        Return OpenAI-compatible tool schemas for all available tools.
-
-        Returns list of tool definitions that can be passed to OpenRouter.
-        """
-        return [
-            {
-                "type": "function",
-                "function": {
-                    "name": "search_web",
-                    "description": "Search the web for current information. Returns search results with titles, descriptions, and URLs. Also returns rich structured data when available (weather forecasts, stock quotes, sports scores, calculations, currency conversion, etc.).",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "query": {
-                                "type": "string",
-                                "description": "The search query to look up"
-                            },
-                            "num_results": {
-                                "type": "integer",
-                                "description": "Number of results to return (5-10)",
-                                "default": 10
-                            }
-                        },
-                        "required": ["query"]
-                    }
-                }
-            }
-        ]
 
     async def execute(self, tool_name: str, arguments: dict) -> dict:
         """
@@ -162,25 +132,18 @@ class ToolExecutor:
     async def _search_web(
         self,
         query: str,
-        num_results: int = 10,
-        _time_hint: str | None = None,
-        _after: str | None = None,
-        _before: str | None = None
+        num_results: int = 3
     ) -> dict:
         """
         Search the web using Brave Search API (uniform across all models).
 
         Args:
             query: Search query string
-            num_results: Number of results to return (1-5)
-            _time_hint: Ignored - kept for compatibility with model calls
-            _after: Ignored - kept for compatibility with model calls
-            _before: Ignored - kept for compatibility with model calls
+            num_results: Number of results to return (1-5, default 3)
 
         Returns:
-            Dictionary with search results, or an error message when misconfigured.
+            Dictionary with search results and optional rich data, or an error message.
         """
-        # Note: _time_hint, _after, _before are accepted but ignored
         if not query or not query.strip():
             return {"error": "Query cannot be empty"}
 
@@ -199,7 +162,7 @@ class ToolExecutor:
                     "https://api.search.brave.com/res/v1/web/search",
                     params={
                         "q": query,
-                        "count": num_results,
+                        "count": num_results,  # Already clamped to 1-5 above
                         "enable_rich_callback": "1",
                     },
                     headers={

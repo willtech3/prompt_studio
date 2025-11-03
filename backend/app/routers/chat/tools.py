@@ -29,7 +29,7 @@ def create_search_tool_schema() -> dict[str, Any]:
         "type": "function",
         "function": {
             "name": "search_web",
-            "description": "Search the web for current information. Returns top results with titles, snippets, and URLs.",
+            "description": "Search the web for current information. Returns search results with titles, descriptions, and URLs. Also returns rich structured data when available (weather forecasts, stock quotes, sports scores, calculations, currency conversion, etc.).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -39,21 +39,8 @@ def create_search_tool_schema() -> dict[str, Any]:
                     },
                     "num_results": {
                         "type": "integer",
-                        "description": "Number of results (1-5)",
+                        "description": "Number of results to return (1-5)",
                         "default": 3
-                    },
-                    "time_hint": {
-                        "type": "string",
-                        "enum": ["day", "week", "month", "year"],
-                        "description": "Freshness hint"
-                    },
-                    "after": {
-                        "type": "string",
-                        "description": "YYYY-MM-DD"
-                    },
-                    "before": {
-                        "type": "string",
-                        "description": "YYYY-MM-DD"
                     }
                 },
                 "required": ["query"]
