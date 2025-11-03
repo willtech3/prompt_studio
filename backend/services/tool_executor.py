@@ -43,7 +43,7 @@ class ToolExecutor:
                 "type": "function",
                 "function": {
                     "name": "search_web",
-                    "description": "Search the web for current information. Returns top search results with titles, snippets, and URLs.",
+                    "description": "Search the web for current information. Returns search results with titles, descriptions, and URLs. Also returns rich structured data when available (weather forecasts, stock quotes, sports scores, calculations, currency conversion, etc.).",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -115,7 +115,7 @@ class ToolExecutor:
     async def _search_web(
         self,
         query: str,
-        num_results: int = 3,
+        num_results: int = 10,
         time_hint: str | None = None,
         after: str | None = None,
         before: str | None = None
@@ -149,11 +149,11 @@ class ToolExecutor:
                         "query": query,
                     }
 
-                # Don't use freshness filtering - too restrictive for most queries
-                # Brave Search naturally prioritizes recent/relevant results
+                # Enable rich search callbacks for structured data (weather, stocks, sports, etc.)
                 params = {
                     "q": query,
                     "count": max(1, min(5, num_results)),
+                    "enable_rich_callback": "1",
                 }
 
                 r = await client.get(
@@ -166,18 +166,72 @@ class ToolExecutor:
                 )
                 r.raise_for_status()
                 data = r.json()
+
+                # Check if rich data is available (weather, stocks, sports, calculator, etc.)
+                rich_data = None
+                if "rich" in data and "hint" in data["rich"]:
+                    callback_key = data["rich"]["hint"].get("callback_key")
+
+                    if callback_key:
+                        # Fetch rich data from callback endpoint
+                        rich_response = await client.get(
+                            "https://api.search.brave.com/res/v1/web/rich",
+                            params={"callback_key": callback_key},
+                            headers={
+                                "Accept": "application/json",
+                                "X-Subscription-Token": self.brave_key,
+                            },
+                        )
+                        if rich_response.status_code == 200:
+                            rich_data = rich_response.json()
+
+                # Extract standard web results
                 web = (data or {}).get("web", {})
                 results_json = web.get("results", []) or []
                 results = []
                 for item in results_json[:num_results]:
                     url = item.get("url", "")
-                    results.append({
+                    result = {
                         "title": item.get("title") or url,
-                        "snippet": item.get("snippet") or item.get("description", ""),
+                        "description": item.get("description", ""),
                         "url": url,
                         "source": (httpx.URL(url).host if url else "Brave"),
-                    })
-                return {"query": query, "num_results": len(results), "results": results, "provider": "brave"}
+                    }
+
+                    # Add extra data fields if available
+                    if item.get("thumbnail"):
+                        result["thumbnail"] = item["thumbnail"].get("src")
+
+                    if item.get("location"):
+                        loc = item["location"]
+                        result["location"] = {
+                            "coordinates": loc.get("coordinates"),
+                            "address": loc.get("postal_address", {}).get("displayAddress"),
+                        }
+
+                    if item.get("profile"):
+                        result["publisher"] = item["profile"].get("name")
+
+                    # Add language and type metadata
+                    if item.get("language"):
+                        result["language"] = item["language"]
+                    if item.get("subtype"):
+                        result["type"] = item["subtype"]
+
+                    results.append(result)
+
+                response = {
+                    "query": query,
+                    "num_results": len(results),
+                    "results": results,
+                    "provider": "brave"
+                }
+
+                # Include rich data if available (weather, stocks, sports, calculator, etc.)
+                if rich_data:
+                    response["rich"] = rich_data
+
+                return response
 
         except httpx.HTTPError as e:
             return {
