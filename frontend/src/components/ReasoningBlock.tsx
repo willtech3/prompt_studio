@@ -26,11 +26,17 @@ export default function ReasoningBlock({ content, isStreaming, open, onToggle }:
         )}
         {open ? <ChevronDown className="h-3.5 w-3.5 opacity-70 ml-auto" /> : <ChevronRight className="h-3.5 w-3.5 opacity-70 ml-auto" />}
       </button>
-      {open && hasContent && (
+      {open && (hasContent || isStreaming) && (
         <div className="mt-2 rounded-md border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-gray-900/50 p-3">
-          <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-            {content}
-          </div>
+          {hasContent ? (
+            <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+              {content}
+            </div>
+          ) : (
+            <div className="text-sm text-gray-500 dark:text-gray-400 italic">
+              Waiting for reasoning tokens…
+            </div>
+          )}
         </div>
       )}
     </section>

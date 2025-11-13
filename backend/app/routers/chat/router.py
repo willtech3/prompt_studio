@@ -233,10 +233,7 @@ async def execute_with_tools(
         # Add tool result to messages
         messages = append_tool_result(messages, completed_call["id"], result)
 
-        # Ask model to finalize
-        async for event in finalize_response(svc, model, messages, params, tools):
-            yield event
-        break
+        # Continue loop - let model decide if it needs more tools or if it's ready to respond
 
     if iteration >= max_calls:
         yield stream_warning_event(f"Reached maximum tool call iterations ({max_calls})")
@@ -252,7 +249,7 @@ async def stream_chat(
     top_p: float | None = Query(1.0, ge=0, le=1),
     reasoning_effort: str | None = Query(None),
     tool_choice: str | None = Query("auto"),
-    max_tool_calls: int = Query(5, ge=1, le=20),
+    max_tool_calls: int = Query(15, ge=1, le=20),
     top_k: int | None = Query(None),
     frequency_penalty: float | None = Query(None),
     presence_penalty: float | None = Query(None),
