@@ -22,6 +22,10 @@ yarn-error.log*
 dist/
 build/
 
+# TypeScript
+*.tsbuildinfo
+frontend/tsconfig.tsbuildinfo
+
 # Environment variables
 .env
 .env.local

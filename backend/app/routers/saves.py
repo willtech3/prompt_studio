@@ -25,7 +25,7 @@ class SaveRequest(BaseModel):
     """
 
     title: str | None = None
-    kind: str | None = None  # 'system','user','prompt','state'
+    kind: str | None = None  
     provider: str | None = None
     model: str | None = None
     data: dict | None = None

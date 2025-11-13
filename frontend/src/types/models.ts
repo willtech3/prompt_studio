@@ -65,3 +65,9 @@ export interface RunTrace {
   reasoning: ReasoningBlock[]
 }
 
+export interface SearchExecution {
+  id: string
+  phase: number
+  open: boolean
+}
+

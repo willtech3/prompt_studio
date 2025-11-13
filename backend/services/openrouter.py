@@ -209,6 +209,7 @@ class OpenRouterService:
                         if isinstance(r, str) and r.strip():
                             yield {"type": "reasoning", "content": r}
                         elif isinstance(r, dict):
+                            # DeepSeek uses "content", Claude uses "text"
                             text = r.get("content") or r.get("text") or ""
                             if isinstance(text, str) and text.strip():
                                 yield {"type": "reasoning", "content": text}
