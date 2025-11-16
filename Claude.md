@@ -10,7 +10,7 @@
 - **No elaborate monitoring/logging** - Simple console logs are fine for now
 
 ## Project Overview
-Prompt Engineering Studio is a modern web application for optimizing and evaluating AI prompts across multiple models using OpenRouter's unified API. The platform helps users create better prompts through best practices, evaluation metrics, and A/B testing.
+Prompt Engineering Studio is a web application for testing and optimizing AI prompts across multiple models using OpenRouter's unified API. The platform helps users write better prompts through guidance, testing, and real-time experimentation.
 
 ## Core Purpose
 - **Primary Goal**: Build a tool that helps users write better AI prompts through guidance, testing, and optimization
@@ -20,35 +20,39 @@ Prompt Engineering Studio is a modern web application for optimizing and evaluat
 ## Technical Stack
 
 ### Backend (Python 3.13+)
-- **Framework**: FastAPI (async, high-performance)
+- **Framework**: FastAPI (async)
 - **Package Manager**: uv (modern Python package management)
 - **Database**: PostgreSQL 16 with SQLAlchemy 2.0 (optional)
-- **API Integration**: OpenRouter for 16+ AI models
+- **API Integration**: OpenRouter for 250+ AI models
+- **External APIs**: Brave Search API (web search), Jina Reader API (page reading)
 
 ### Frontend (React 19)
 - **Framework**: React 19 with TypeScript
 - **Styling**: Tailwind CSS v4
-- **UI Components**: Shadcn/ui
+- **UI Components**: Custom components with Tailwind
+- **Icons**: Lucide React
 - **State Management**: Zustand
 - **Build Tool**: Vite
-- **Data Fetching**: TanStack Query
+- **Markdown**: react-markdown with syntax highlighting
 
 ## Implemented Features
 
 ### Core Features (✅ Complete)
-1. Chat streaming with 16+ OpenRouter models
-2. Server-Sent Events (SSE) for real-time responses
-3. Variable interpolation with `{{variable}}` syntax
-4. Model parameter controls (temperature, top-p, top-k, etc.)
-5. Save/load prompt snapshots
-6. AI-powered prompt optimization
-7. Provider-specific best practices and guides
-8. Tool calling (web search via Brave, time, calculator)
-9. Model catalog with refresh capability
-10. Reasoning effort control for compatible models
+1. **Real-time chat streaming** with 250+ OpenRouter models via Server-Sent Events (SSE)
+2. **Variable interpolation** with `{{variable}}` syntax
+3. **Model parameter controls**: temperature, top-p, top-k, frequency/presence penalties, response format, stop sequences
+4. **Reasoning effort control** for compatible models (DeepSeek, OpenAI o1)
+5. **AI-powered prompt optimization** using meta-prompts
+6. **Provider-specific best practices and guides** (Anthropic, OpenAI, Google, xAI, DeepSeek)
+7. **Save/load prompt snapshots** for experimentation
+8. **Tool calling support**:
+   - `search_web`: Web search via Brave Search API
+   - `read_url`: Page reading via Jina Reader API (converts URLs to LLM-friendly Markdown)
+9. **Model catalog** with refresh capability and detailed model info
+10. **Responsive UI** with prompt editor, parameter controls, response streaming, tool execution display
 
 ### Future Features (Not Implemented)
-1. User authentication (no login/register yet)
+1. User authentication (single-user local app for now)
 2. Multi-user support and team collaboration
 3. Evaluation metrics and scoring
 4. A/B testing framework
@@ -57,27 +61,35 @@ Prompt Engineering Studio is a modern web application for optimizing and evaluat
 
 ## Database Schema (Current)
 ```sql
--- Optional tables (app works without database)
-model_configs (id, model_id, model_name, provider, context_length, pricing, ...)
-provider_content (id, provider_id, content_type, model_id, title, content, ...)
-snapshots (id, title, kind, provider, model, data, created_at, updated_at)
+-- Optional tables (app works without database for basic chat)
+model_configs (
+  id, model_id, model_name, provider, context_length,
+  max_completion_tokens, pricing, supports_tools, ...
+)
 
--- Defined but not yet used
-users (id, email, username, password_hash, is_active, created_at, updated_at)
+provider_content (
+  id, provider_id, content_type, model_id,
+  title, content, doc_url, ...
+)
+
+snapshots (
+  id, title, kind, provider, model,
+  data, created_at, updated_at
+)
 ```
-Note: Database is optional. The app functions without it for basic chat.
+Note: Database is optional. The app functions without it for basic chat. No users table - this is a single-user local app.
 
 ## API Endpoints
 ```
-GET  /health                              - Health check
+GET  /health                              - Health check (includes DB and API key status)
 GET  /api/chat/stream                     - Stream chat with tool calling
 POST /api/optimize                        - Optimize prompts using meta-prompt
 GET  /api/models                          - List available models
 GET  /api/models/{model_path}/info        - Get model details
 POST /api/models/refresh                  - Refresh model catalog from OpenRouter
-GET  /api/providers                       - List providers
-GET  /api/providers/{id}/guide            - Get optimization guide
-GET  /api/providers/{id}/prompting-guides - Get prompting guides
+GET  /api/providers                       - List providers with model counts
+GET  /api/providers/{id}/guide            - Get optimization guide for provider
+GET  /api/providers/{id}/prompting-guides - Get prompting guides (general + model-specific)
 POST /api/saves                           - Create snapshot
 GET  /api/saves                           - List snapshots
 GET  /api/saves/{id}                      - Get snapshot by ID
@@ -95,28 +107,50 @@ GET  /api/saves/{id}                      - Get snapshot by ID
 - **Token Limits**: Different models have different context windows
 - **Response Time**: Keep UI responsive during API calls
 - **Cost Management**: Track and display costs transparently
+- **Tool APIs**: Brave Search and Jina Reader have rate limits
 
 ## File Structure
 ```
 prompt_studio/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py           # FastAPI app entry point
-│   │   ├── routers/          # API endpoints (chat, models, optimize, saves, providers)
+│   │   ├── main.py           # FastAPI app entry point (62 lines)
+│   │   ├── routers/          # API endpoints
+│   │   │   ├── chat/         # Modular chat router (messages, parameters, providers, streaming, tools)
+│   │   │   ├── models.py     # Model catalog management
+│   │   │   ├── optimize.py   # Prompt optimization
+│   │   │   ├── providers.py  # Provider guides and content
+│   │   │   └── saves.py      # Snapshot management
 │   │   └── core/             # Configuration (CORS, env loading)
-│   ├── models/               # SQLAlchemy models (user, model_config, snapshot, provider_content)
-│   ├── services/             # External services (openrouter, model_catalog, tool_executor)
+│   ├── models/               # SQLAlchemy models (model_config, provider_content, snapshot)
+│   ├── services/             # External services
+│   │   ├── openrouter.py     # OpenRouter API client
+│   │   ├── model_catalog.py  # Model catalog syncing
+│   │   └── tool_executor.py  # Safe tool execution (search_web, read_url)
 │   ├── config/               # Database config, optimization prompts
 │   ├── alembic/              # Database migrations
 │   ├── scripts/              # Utility scripts (seed_provider_content.py)
+│   ├── tests/                # Tests (basic structure in place)
+│   ├── pyproject.toml        # Dependencies and tool config
 │   └── justfile              # Development commands
-├── frontend/                 # React application
+├── frontend/
+│   ├── src/
+│   │   ├── components/       # React components (20+ components)
+│   │   ├── store/            # Zustand stores (prompt, settings, theme, toast, ui)
+│   │   ├── services/         # API client
+│   │   ├── utils/            # Utilities (theme, tokenEstimator, modelPresets)
+│   │   └── types/            # TypeScript types
+│   ├── package.json          # Frontend dependencies
+│   └── vite.config.ts        # Vite build config
 └── docs/                     # Documentation
+    ├── api/                  # OpenRouter API docs
+    ├── frameworks/           # FastAPI, React 19, Tailwind CSS v4 docs
+    └── prompting_guides/     # Provider-specific prompting guides
 ```
 
 ## Development Workflow
-1. Backend API first (can test with curl/Postman)
-2. Database schema and models
+1. Backend API first (can test with Bruno/curl)
+2. Database schema and models (optional)
 3. Basic frontend UI
 4. Integration and refinement
 5. Advanced features incrementally
@@ -136,7 +170,7 @@ just stop           # Stop running server
 # Testing & quality
 just test           # Run tests with coverage
 just lint           # Run ruff linting
-just format         # Format code with black
+just format         # Format code with ruff
 just typecheck      # Run mypy type checking
 
 # Database
@@ -159,30 +193,35 @@ All commands use `uv run` internally, so you never need to manually activate the
 - **User**: Successfully execute prompts, save/load prompts, compare models
 - **Business**: Track token usage, optimize costs, improve prompt quality
 
-## Current Status (October 2025)
+## Current Status (November 2025)
 - ✅ MVP Complete - All core features implemented
 - ✅ Backend fully functional with streaming, tool calling, optimization
 - ✅ Frontend with React 19, full UI implementation
 - ✅ Database schema and migrations in place
-- ✅ Model catalog with 16+ OpenRouter models
-- ✅ Provider best practices and guides
-- ⏳ No authentication yet (planned for multi-user support)
-- ⏳ No automated tests yet (greenfield phase)
+- ✅ Model catalog with 250+ OpenRouter models
+- ✅ Provider best practices and guides (5 providers)
+- ✅ Tool calling with Brave Search and Jina Reader
+- ✅ Chat router refactored into modular components
+- ⏳ No authentication (single-user local app)
+- ⏳ Basic test structure in place (3 test files)
 
 ## Recent Completed Work
 1. Backend refactoring (main.py reduced from 960 to 62 lines)
 2. Router extraction (chat, models, optimize, saves, providers)
-3. Tool calling implementation (web search, time, calculator)
-4. Prompt optimization with meta-prompts
-5. Snapshot save/load functionality
-6. Provider-specific guides and best practices
+3. Chat router modularization (messages, parameters, providers, streaming, tools)
+4. Tool calling implementation (web search via Brave, page reading via Jina)
+5. Prompt optimization with meta-prompts
+6. Snapshot save/load functionality
+7. Provider-specific guides and best practices
+8. Reasoning effort control for compatible models
+9. Model catalog refresh from OpenRouter
 
 ## Next Steps
-1. Add basic integration tests for critical endpoints
-2. Decide on authentication approach (implement or defer)
-3. Consider consolidating configuration into single settings module
-4. Extract large chat router into smaller, focused modules
-5. Add CI/CD pipeline when ready for team collaboration
+1. Expand test coverage for critical endpoints
+2. Add cost tracking and analytics
+3. Implement evaluation metrics
+4. Consider A/B testing framework
+5. Add batch processing capabilities
 
 ## 🚨 NON-NEGOTIABLE RULES
 1. **USE JUSTFILE COMMANDS** - Always use commands from `backend/justfile` for Python/API development tasks (start, stop, test, lint, format, etc.) instead of running commands directly

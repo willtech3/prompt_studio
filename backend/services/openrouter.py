@@ -15,10 +15,11 @@ class OpenRouterService:
     - Streaming returns raw text chunks suitable for SSE forwarding.
     """
 
-    def __init__(self, api_key: str | None = None, base_url: str | None = None):
+    def __init__(self, api_key: str | None = None, base_url: str | None = None, request_id: str | None = None):
         self.api_key = api_key or os.getenv("OPENROUTER_API_KEY", "")
         self.base_url = base_url or os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
         self._client: httpx.AsyncClient | None = None
+        self.request_id = request_id
 
     async def _client_ctx(self) -> httpx.AsyncClient:
         if self._client is None:
@@ -37,6 +38,10 @@ class OpenRouterService:
                 headers["HTTP-Referer"] = referer
             if title:
                 headers["X-Title"] = title
+
+            # Attach request correlation id if available
+            if self.request_id:
+                headers["X-Request-Id"] = self.request_id
 
             self._client = httpx.AsyncClient(
                 base_url=self.base_url,

@@ -4,7 +4,7 @@ import os
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,6 +43,7 @@ from .streaming import (
 )
 from .tools import (
     build_tool_call_from_delta,
+    create_read_url_tool_schema,
     create_search_tool_schema,
     get_tool_metadata,
     parse_tool_arguments,
@@ -50,7 +51,7 @@ from .tools import (
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
-MAX_TOOL_CALLS = 20
+MAX_TOOL_CALLS = 50
 
 
 async def get_max_tokens(model: str, session: AsyncSession) -> int | None:
@@ -167,12 +168,15 @@ async def execute_with_tools(
     tools: list[dict[str, Any]],
     tool_names: set[str],
     tool_choice: str | None,
-    max_calls: int
+    max_calls: int,
+    request_id: str | None
 ) -> AsyncGenerator[str]:
     """Execute chat with tool calling support."""
-    executor = ToolExecutor()
+    executor = ToolExecutor(request_id=request_id)
     provider = get_provider_id(model)
     iteration = 0
+    had_tool_call = False
+    had_content = False
 
     while iteration < max_calls:
         iteration += 1
@@ -193,6 +197,8 @@ async def execute_with_tools(
         completed_call, content_sent, events = await stream_until_tool_call(
             svc, model, messages, call_params
         )
+        if content_sent:
+            had_content = True
 
         # Yield all the events that were collected
         for event in events:
@@ -211,6 +217,7 @@ async def execute_with_tools(
         # Add assistant message with tool call
         assistant_msg = build_assistant_tool_message([completed_call])
         messages.append(assistant_msg)
+        had_tool_call = True
 
         # Execute tool
         func_name = completed_call["name"]
@@ -238,9 +245,15 @@ async def execute_with_tools(
     if iteration >= max_calls:
         yield stream_warning_event(f"Reached maximum tool call iterations ({max_calls})")
 
+    # If tools were used but no content was ever streamed, ask the model to finalize
+    if had_tool_call and not had_content:
+        async for final_event in finalize_response(svc, model, messages, params, tools):
+            yield final_event
+
 
 @router.get("/stream")
 async def stream_chat(
+    request: Request,
     model: str = Query(..., description="Model ID to use"),
     prompt: str = Query("", description="User prompt content"),
     system: str | None = Query(None, description="Optional system prompt"),
@@ -249,7 +262,7 @@ async def stream_chat(
     top_p: float | None = Query(1.0, ge=0, le=1),
     reasoning_effort: str | None = Query(None),
     tool_choice: str | None = Query("auto"),
-    max_tool_calls: int = Query(15, ge=1, le=20),
+    max_tool_calls: int = Query(30, ge=1, le=50),
     top_k: int | None = Query(None),
     frequency_penalty: float | None = Query(None),
     presence_penalty: float | None = Query(None),
@@ -273,9 +286,12 @@ async def stream_chat(
         # Build messages
         messages = build_initial_messages(system, prompt)
 
-        # Always provide search_web tool - trust model to decide when to use it
-        parsed_tools = [create_search_tool_schema()]
-        tool_names = {"search_web"}
+        # Provide web search + page reader tools - trust model to decide when to use them
+        parsed_tools = [
+            create_search_tool_schema(),
+            create_read_url_tool_schema(),
+        ]
+        tool_names = {"search_web", "read_url"}
 
         # Build parameters
         params = build_chat_params(
@@ -295,14 +311,21 @@ async def stream_chat(
             params["stop"] = stop_sequences
 
         # Initialize service
-        svc = OpenRouterService()
+        svc = OpenRouterService(request_id=getattr(request.state, "request_id", None))
 
         try:
             if parsed_tools:
                 # Execute with tools
                 async for event in execute_with_tools(
-                    svc, model, messages, params, parsed_tools, tool_names,
-                    tool_choice, max_tool_calls or MAX_TOOL_CALLS
+                    svc,
+                    model,
+                    messages,
+                    params,
+                    parsed_tools,
+                    tool_names,
+                    tool_choice,
+                    max_tool_calls or MAX_TOOL_CALLS,
+                    getattr(request.state, "request_id", None),
                 ):
                     yield event
             else:

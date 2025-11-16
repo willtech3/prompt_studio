@@ -237,8 +237,7 @@ export function ResponsePanel() {
               search.id === parsed.id ? { ...search, open: false } : search
             ))
             // Advance phase immediately when tool completes, so next reasoning chunk gets new phase
-            const existingPhases = Object.keys(reasoningTexts).map(Number)
-            const nextPhase = existingPhases.length > 0 ? Math.max(...existingPhases) + 1 : 1
+            const nextPhase = reasoningPhaseRef.current + 1
             reasoningPhaseRef.current = nextPhase
             // Open the reasoning block immediately with a spinner for the next reasoning session
             setReasoningOpenMap((prev) => ({ ...prev, [nextPhase]: true }))

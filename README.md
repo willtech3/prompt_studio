@@ -1,21 +1,26 @@
 # Prompt Engineering Studio
 
-Web application for testing and optimizing prompts across multiple AI models via OpenRouter.
+Web application for testing and optimizing AI prompts across multiple models via OpenRouter.
 
 ## Features
 
-- Stream chat with 16+ AI models (OpenAI, Anthropic, Google, DeepSeek, XAI)
+- Stream chat with 250+ AI models (OpenAI, Anthropic, Google, DeepSeek, xAI, etc.)
 - Variable interpolation with `{{variable}}` syntax
 - AI-powered prompt optimization
-- Save/load prompt sessions
-- Tool calling support (web search, time, calculator)
-- Model parameter controls (temperature, top-p, top-k, etc.)
+- Save/load prompt snapshots
+- Tool calling support:
+  - Web search via Brave Search API
+  - Page reading via Jina Reader API (fetches full page content in Markdown)
+- Model parameter controls (temperature, top-p, top-k, frequency/presence penalties, response format, stop sequences)
+- Reasoning effort control for compatible models (DeepSeek, OpenAI o1)
+- Provider-specific best practices and prompting guides
 
 ## Tech Stack
 
-**Backend:** FastAPI, Python 3.13, PostgreSQL, SQLAlchemy 2.0, uv
+**Backend:** FastAPI, Python 3.13, PostgreSQL (optional), SQLAlchemy 2.0, uv
 **Frontend:** React 19, TypeScript, Tailwind CSS v4, Vite, Zustand
-**AI:** OpenRouter API
+**AI:** OpenRouter API (250+ models)
+**Tools:** Brave Search API, Jina Reader API
 
 ## Structure
 
@@ -23,18 +28,19 @@ Web application for testing and optimizing prompts across multiple AI models via
 prompt_studio/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py
-│   │   ├── routers/         # API endpoints
-│   │   └── core/            # Configuration
-│   ├── models/              # Database models
-│   ├── services/            # OpenRouter, tool executor
-│   ├── config/              # Database, prompts
-│   └── alembic/             # Migrations
+│   │   ├── main.py           # FastAPI entry point (62 lines)
+│   │   ├── routers/          # API endpoints (chat, models, optimize, saves, providers)
+│   │   └── core/             # Configuration
+│   ├── models/               # Database models (model_config, provider_content, snapshot)
+│   ├── services/             # OpenRouter, tool executor, model catalog
+│   ├── config/               # Database, optimization prompts
+│   ├── alembic/              # Migrations
+│   └── justfile              # Development commands
 └── frontend/
     └── src/
-        ├── components/
-        ├── store/
-        └── services/
+        ├── components/       # React components (20+)
+        ├── store/            # Zustand stores
+        └── services/         # API client
 ```
 
 ## Setup
@@ -48,11 +54,11 @@ prompt_studio/
 **Backend:**
 ```bash
 cd backend
-just sync
-cp .env.example .env  # Add OPENROUTER_API_KEY
-just migrate          # Optional: run migrations
-just seed             # Optional: load best practices
-just start            # Start server
+just sync              # Install dependencies
+cp .env.example .env   # Add OPENROUTER_API_KEY
+just migrate           # Optional: run migrations
+just seed              # Optional: load provider content
+just start             # Start server
 ```
 
 **Frontend:**
@@ -69,14 +75,15 @@ npm run dev
 
 ## Environment Variables
 
-Required:
+**Required:**
 - `OPENROUTER_API_KEY` - Your OpenRouter API key
 
-Optional:
+**Optional:**
 - `DATABASE_URL` - PostgreSQL connection (for persistence)
 - `OPENROUTER_HTTP_REFERER` - Attribution header
 - `OPENROUTER_X_TITLE` - Attribution header
 - `BRAVE_API_KEY` - For web search tool
+- `JINA_API_KEY` - For enhanced page reading (200 RPM vs 20 RPM)
 
 ## API Endpoints
 
@@ -87,6 +94,7 @@ Optional:
 - `POST /api/models/refresh` - Refresh model catalog
 - `GET /api/providers` - List providers
 - `GET /api/providers/{id}/guide` - Get optimization guide
+- `GET /api/providers/{id}/prompting-guides` - Get prompting guides
 - `POST /api/saves` - Save snapshot
 - `GET /api/saves` - List snapshots
 - `GET /api/saves/{id}` - Get snapshot
@@ -108,6 +116,18 @@ just seed       # Seed database
 npm run dev     # Start dev server
 npm run build   # Production build
 ```
+
+## Database
+
+The app works without a database for basic chat. Database is optional and provides:
+- Model catalog caching
+- Provider content storage
+- Snapshot persistence
+
+Tables:
+- `model_configs` - Model metadata and pricing
+- `provider_content` - Best practices and guides
+- `snapshots` - Saved prompt sessions
 
 ## License
 

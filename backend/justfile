@@ -3,7 +3,7 @@
 
 # Start the FastAPI development server
 start:
-    uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+    uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir app
 
 # Stop the FastAPI development server
 stop:
@@ -29,6 +29,12 @@ format-check:
 # Run database migrations
 migrate:
     uv run alembic upgrade head
+
+# Start local PostgreSQL if not already running (macOS/Homebrew)
+db:
+	@echo "Ensuring Postgres on 127.0.0.1:5432..."
+	@pg_isready -q -h 127.0.0.1 -p 5432 2>/dev/null || brew services start postgresql@16 >/dev/null 2>&1 || brew services start postgresql >/dev/null 2>&1 || true
+	@pg_isready -q -h 127.0.0.1 -p 5432 2>/dev/null && echo "✓ Postgres running" || (echo "⚠️  Start Postgres manually: brew services start postgresql@16"; exit 1)
 
 # Create a new database migration
 migration name:

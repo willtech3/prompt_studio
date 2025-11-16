@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import NullPool
 
 
 class Base(DeclarativeBase):
@@ -19,7 +20,7 @@ class Base(DeclarativeBase):
 class Settings(BaseSettings):
     """Application settings."""
 
-    DATABASE_URL: str = "postgresql+asyncpg://prompt_admin:password@localhost:5432/prompt_studio"
+    DATABASE_URL: str = "postgresql+asyncpg://prompt_admin:password@127.0.0.1:5432/prompt_studio"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -41,7 +42,10 @@ def init_engine() -> AsyncEngine | None:
     db_url = get_database_url()
     if not db_url:
         return None
-    _engine = create_async_engine(db_url, future=True)
+    # Use NullPool to avoid connection reuse issues with asyncpg in simple MVP usage
+    # and tests. This keeps the behavior straightforward at the cost of some
+    # connection overhead, which is fine for low traffic and local development.
+    _engine = create_async_engine(db_url, future=True, poolclass=NullPool)
     _sessionmaker = async_sessionmaker(_engine, expire_on_commit=False)
     return _engine
 
