@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-type ProviderID = 'openai' | 'anthropic' | 'google' | 'xai' | 'deepseek'
+export type ProviderID = 'openai' | 'anthropic' | 'google' | 'xai' | 'deepseek'
 
 interface SettingsState {
   enabledProviders: Record<ProviderID, boolean>

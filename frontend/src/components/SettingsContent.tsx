@@ -4,7 +4,17 @@ import { ParametersPanel } from './ParametersPanel'
 import { ModelDetails } from './ModelDetails'
 import { usePromptStore, type Provider } from '../store/promptStore'
 import { getModelPreset } from '../utils/modelPresets'
-import { useSettingsStore } from '../store/settingsStore'
+import { useSettingsStore, type ProviderID } from '../store/settingsStore'
+
+const KNOWN_PROVIDERS: Record<ProviderID, true> = {
+  openai: true,
+  anthropic: true,
+  google: true,
+  xai: true,
+  deepseek: true,
+}
+
+const isKnownProvider = (id: string): id is ProviderID => id in KNOWN_PROVIDERS
 
 export function SettingsContent() {
   const provider = usePromptStore((s) => s.provider)
@@ -36,7 +46,12 @@ export function SettingsContent() {
         if (!cancelled) {
           setModels(modelList)
           // filter providers by user settings
-          const filtered = providerList.filter((p) => enabled[(p.id as any)] !== false)
+          const filtered = providerList.filter((p) => {
+            if (isKnownProvider(p.id)) {
+              return enabled[p.id] !== false
+            }
+            return true
+          })
           setProviders(filtered)
         }
       } catch {

@@ -1,6 +1,9 @@
 import os
+import hashlib
+import json
+import time
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,19 +15,34 @@ from services.model_catalog import refresh_model_catalog
 router = APIRouter(prefix="/api/models", tags=["models"])
 
 
+MODELS_TTL_SECONDS = 3600
+_models_cache: dict = {"expires": 0.0, "etag": "", "payload": {"data": []}}
+
+
 @router.get("")
-async def list_models(session: AsyncSession = Depends(get_session)):
-    """Return available models from database."""
-    rows = (
-        (
-            await session.execute(
-                select(ModelConfig).order_by(ModelConfig.provider, ModelConfig.model_id)
+async def list_models(request: Request, response: Response, session: AsyncSession = Depends(get_session)):
+    """Return available models from database with simple ETag/TTL caching."""
+    now = time.time()
+    if now > _models_cache["expires"]:
+        rows = (
+            (
+                await session.execute(
+                    select(ModelConfig).order_by(ModelConfig.provider, ModelConfig.model_id)
+                )
             )
+            .scalars()
+            .all()
         )
-        .scalars()
-        .all()
-    )
-    return {"data": [r.raw or {"id": r.model_id, "name": r.model_name} for r in rows]}
+        payload = {"data": [r.raw or {"id": r.model_id, "name": r.model_name} for r in rows]}
+        etag = hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+        _models_cache.update({"expires": now + MODELS_TTL_SECONDS, "etag": etag, "payload": payload})
+
+    if request.headers.get("if-none-match") == _models_cache["etag"]:
+        response.status_code = 304
+        return
+    response.headers["ETag"] = _models_cache["etag"]
+    response.headers["Cache-Control"] = f"public, max-age={MODELS_TTL_SECONDS}"
+    return _models_cache["payload"]
 
 
 @router.get("/{model_path:path}/info")
