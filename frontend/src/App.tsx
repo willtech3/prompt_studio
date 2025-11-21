@@ -11,6 +11,7 @@ import { UserSettingsScreen } from './components/UserSettingsScreen'
 import { HistoryPanel } from './components/HistoryPanel'
 import { PromptGuidanceModal } from './components/PromptGuidanceModal'
 import { PanelLeft, Settings2 } from 'lucide-react'
+import { useResizeHandler } from './hooks/useResizable'
 
 export default function App() {
   return (
@@ -116,28 +117,7 @@ function DesktopPushLayout() {
 }
 
 function ResizeHandle({ side, onResize, currentWidth }: { side: 'left' | 'right', onResize: (width: number) => void, currentWidth: number }) {
-  const handleMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault()
-    const startX = e.clientX
-    const startWidth = currentWidth
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const delta = side === 'right' ? e.clientX - startX : startX - e.clientX
-      onResize(startWidth + delta)
-    }
-
-    const handleMouseUp = () => {
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-    }
-
-    document.addEventListener('mousemove', handleMouseMove)
-    document.addEventListener('mouseup', handleMouseUp)
-    document.body.style.cursor = 'col-resize'
-    document.body.style.userSelect = 'none'
-  }
+  const handleMouseDown = useResizeHandler({ side, onResize, currentWidth })
 
   return (
     <div

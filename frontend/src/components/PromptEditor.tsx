@@ -6,6 +6,7 @@ import { useToastStore } from '../store/toastStore'
 import { estimateTokensApproximate } from '../utils/tokenEstimator'
 import { useAutoGrow } from '../hooks/useAutoGrow'
 import { useUIStore } from '../store/uiStore'
+import { interpolate } from '../utils/interpolate'
 
 export function PromptEditor() {
   const systemPrompt = usePromptStore((s) => s.systemPrompt)
@@ -68,8 +69,7 @@ export function PromptEditor() {
       const isRun = (isMac ? e.metaKey : e.ctrlKey) && e.key.toLowerCase() === 'enter'
       if (isRun) {
         e.preventDefault()
-        const icon = document.querySelector('.lucide-play') as HTMLElement | null
-        const btn = icon ? (icon.closest('button') as HTMLButtonElement | null) : null
+        const btn = document.getElementById('generate-button') as HTMLButtonElement | null
         btn?.click() // trigger Run button if present
       }
     }
@@ -77,16 +77,8 @@ export function PromptEditor() {
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
-  const interpolate = (text: string) => {
-    if (!text) return ''
-    return text.replace(/\{\{\s*([a-zA-Z0-9_\-]+)\s*\}\}/g, (_, key) => {
-      const found = variables.find(v => v.name.trim() === key)
-      return found ? found.value : `{{${key}}}`
-    })
-  }
-
-  const composedSystem = interpolate(systemPrompt)
-  const composedUser = interpolate(userPrompt)
+  const composedSystem = interpolate(systemPrompt, variables)
+  const composedUser = interpolate(userPrompt, variables)
   const usedVars = Array.from(new Set((systemPrompt + ' ' + userPrompt).match(/\{\{\s*([a-zA-Z0-9_\-]+)\s*\}\}/g)?.map(s => s.replace(/\{|\}|\s/g, '')) || [])).map(name => ({
     name,
     value: variables.find(v => v.name.trim() === name)?.value ?? '',

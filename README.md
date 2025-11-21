@@ -129,6 +129,18 @@ Tables:
 - `provider_content` - Best practices and guides
 - `snapshots` - Saved prompt sessions
 
+## Deployment
+
+Prompt Studio is designed to be deployed with:
+- **API** on Fly.io
+- **PostgreSQL** on Neon
+- **Frontend** on Vercel
+- **CI/CD** via GitHub Actions
+
+For a detailed, step-by-step deployment guide (including Fly/Neon/Vercel setup, GitHub secrets, and the CI pipeline stages), see:
+
+- `docs/DEPLOYMENT.md`
+
 ## License
 
 MIT

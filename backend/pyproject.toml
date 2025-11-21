@@ -2,7 +2,7 @@
 name = "prompt-studio-backend"
 version = "0.1.0"
 description = "Backend API for Prompt Engineering Studio"
-requires-python = ">=3.13"
+requires-python = ">=3.13,<3.14"
 authors = [
     { name = "Your Name", email = "your.email@example.com" }
 ]
