@@ -1,0 +1,11 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "https://prompt-studio-api.fly.dev/api/$1"
+    }
+  ]
+}
+
+
+

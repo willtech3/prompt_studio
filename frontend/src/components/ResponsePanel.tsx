@@ -1,13 +1,13 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
-import React, { useRef, useState, useMemo, useCallback } from 'react'
+import React, { useState, useMemo, useCallback } from 'react'
 import { Copy, Save as SaveIcon, Settings2, Sparkles, Square } from 'lucide-react'
 import { usePromptStore } from '../store/promptStore'
 import { api } from '../services/api'
 import { useToastStore } from '../store/toastStore'
 import { useUIStore } from '../store/uiStore'
-import { RunTrace, ToolExecutionTrace, SearchExecution } from '../types/models'
+import { useChatStream } from '../hooks/useChatStream'
 import ToolChips from './ToolChips'
 import RunInspectorDrawer from './RunInspectorDrawer'
 import ResponseFootnotes from './ResponseFootnotes'
@@ -18,292 +18,39 @@ import 'highlight.js/styles/github-dark.css' // Dark theme only
 export function ResponsePanel() {
   const response = usePromptStore((s) => s.response)
   const isStreaming = usePromptStore((s) => s.isStreaming)
-  const setIsStreaming = usePromptStore((s) => s.setIsStreaming)
-  const setResponse = usePromptStore((s) => s.setResponse)
-  const appendResponse = usePromptStore((s) => s.appendResponse)
-  const addHistoryEntry = usePromptStore((s) => s.addHistoryEntry)
-  const systemPrompt = usePromptStore((s) => s.systemPrompt)
-  const userPrompt = usePromptStore((s) => s.userPrompt)
-  const variables = usePromptStore((s) => s.variables)
-  const parameters = usePromptStore((s) => s.parameters)
   const reasoningEffort = usePromptStore((s) => s.reasoningEffort)
+  const userPrompt = usePromptStore((s) => s.userPrompt)
+  const systemPrompt = usePromptStore((s) => s.systemPrompt)
+  const provider = usePromptStore((s) => s.provider)
   const model = usePromptStore((s) => s.model)
+  const parameters = usePromptStore((s) => s.parameters)
+  const variables = usePromptStore((s) => s.variables)
+  
   const settingsOpen = useUIStore((s) => s.settingsOpen)
   const toggleSettings = useUIStore((s) => s.toggleSettings)
   const resetTick = usePromptStore((s) => s.resetTick)
   
-  const currentStream = useRef<EventSource | null>(null)
-  const [runTrace, setRunTrace] = useState<RunTrace | null>(null)
   const [inspectorOpen, setInspectorOpen] = useState(false)
   const [focusToolId, setFocusToolId] = useState<string | undefined>()
-  const [warning, setWarning] = useState<string | null>(null)
-  const [searchExecutions, setSearchExecutions] = useState<SearchExecution[]>([])
-  const [reasoningPhase, setReasoningPhase] = useState<number>(0)
-  // Use ref to track current phase in event handlers (avoids stale closure issues)
-  const reasoningPhaseRef = useRef<number>(0)
-  const pendingOpenSearchRef = useRef<boolean>(false)
-  const reasoningSilenceTimerRef = useRef<number | null>(null)
-  const [reasoningOpenMap, setReasoningOpenMap] = useState<Record<number, boolean>>({})
-  const [reasoningTexts, setReasoningTexts] = useState<Record<number, string>>({})
 
-  const nowIso = () => new Date().toISOString()
-  const parseArgs = (args: string): Record<string, unknown> | null => {
-    try { return JSON.parse(args) } catch { return { _raw: args } as any }
-  }
-  const extractLinks = (result: any) => {
-    try {
-      const out: Array<{ title: string; url: string; source?: string; snippet?: string }> = []
-      // Common shape: { success, result: { results: [{ title, url, source, snippet }] } }
-      const items = result?.result?.results || result?.results || []
-      if (Array.isArray(items)) {
-        for (const it of items) {
-          if (it && typeof it.url === 'string') {
-            out.push({ title: it.title || it.url, url: it.url, source: it.source, snippet: it.snippet })
-          }
-        }
-      }
-      if (out.length) return out
-      // Fallback: a direct url field
-      if (typeof result?.url === 'string') return [{ title: result.title || result.url, url: result.url }]
-      return []
-    } catch { return [] }
-  }
+  const {
+    runTrace,
+    warning,
+    reasoningPhase,
+    reasoningTexts,
+    reasoningOpenMap,
+    setReasoningOpenMap,
+    searchExecutions,
+    setSearchExecutions,
+    generate,
+    stop
+  } = useChatStream()
 
-  // Clear tool traces when user presses Clear
-  // resetTick increments in store.reset()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  React.useEffect(() => { setRunTrace(null); setInspectorOpen(false); setFocusToolId(undefined) }, [resetTick])
-
-  const onGenerate = () => {
-    if (isStreaming) return
-    setResponse('')
-    setWarning(null)
-    setSearchExecutions([])
-    setReasoningPhase(0)
-    reasoningPhaseRef.current = 0
-    pendingOpenSearchRef.current = false
-    if (reasoningSilenceTimerRef.current) window.clearTimeout(reasoningSilenceTimerRef.current)
-    reasoningSilenceTimerRef.current = null
-    // Initialize phase 0 reasoning block as open immediately (will show spinner for models with reasoning)
-    setReasoningOpenMap({ 0: true })
-    setReasoningTexts({})
-    setRunTrace({
-      runId: `run-${Date.now()}`,
-      model,
-      startedAt: nowIso(),
-      tools: [],
-      reasoning: [],
-    })
-    addHistoryEntry()
-    setIsStreaming(true)
-
-    const interpolate = (text?: string | null) => {
-      if (!text) return ''
-      return text.replace(/\{\{\s*([a-zA-Z0-9_\-]+)\s*\}\}/g, (_m, key) => {
-        const found = variables.find((v) => v.name.trim() === key)
-        return found ? found.value : _m
-      })
-    }
-    const sys = interpolate(systemPrompt)
-    const usr = interpolate(userPrompt)
-    const es = api.streamChat({
-      model,
-      prompt: usr,
-      system: sys || undefined,
-      temperature: parameters.temperature,
-      topP: parameters.topP,
-      maxTokens: parameters.maxTokens,
-      topK: parameters.topK,
-      frequencyPenalty: parameters.frequencyPenalty,
-      presencePenalty: parameters.presencePenalty,
-      responseFormat: parameters.responseFormat,
-      stop: parameters.stop,
-      reasoningEffort: reasoningEffort,
-      // Backend always provides search_web by default - trust the model to decide when to use it
-    })
-    currentStream.current = es
-    es.addEventListener('message', (e) => {
-      try {
-        const parsed = JSON.parse(e.data)
-        
-        // Handle different message types
-        if (parsed.type === 'reasoning') {
-          const chunk = typeof parsed.content === 'string' ? parsed.content : ''
-          if (chunk) {
-            const phase = reasoningPhaseRef.current
-            setReasoningTexts((prev) => ({ ...prev, [phase]: (prev[phase] || '') + chunk }))
-            // Open the reasoning panel for this phase on first token arrival
-            setReasoningOpenMap((prev) => (prev[phase] ? prev : { ...prev, [phase]: true }))
-            // If a search is pending, only open it after a brief silence in reasoning
-            if (pendingOpenSearchRef.current) {
-              if (reasoningSilenceTimerRef.current) window.clearTimeout(reasoningSilenceTimerRef.current)
-              reasoningSilenceTimerRef.current = window.setTimeout(() => {
-                setReasoningOpenMap((prev) => ({ ...prev, [phase]: false }))
-                // Open most recent search execution
-                setSearchExecutions((prev) => {
-                  if (prev.length === 0) return prev
-                  const updated = [...prev]
-                  updated[updated.length - 1] = { ...updated[updated.length - 1], open: true }
-                  return updated
-                })
-                pendingOpenSearchRef.current = false
-              }, 350)
-            }
-          }
-        }
-        else if (parsed.type === 'tool_calls') {
-          // Model wants to call tools
-          const executions: ToolExecutionTrace[] = (parsed.calls || []).map((call: any) => ({
-            id: call.id || `${call.name}-${Date.now()}`,
-            name: call.name,
-            displayName: call.name?.replace(/_/g, ' '),
-            status: 'queued' as const,
-            parameters: typeof call.arguments === 'string' ? parseArgs(call.arguments) : call.arguments,
-            error: null,
-          }))
-          setRunTrace((prev) => prev ? { ...prev, tools: [...prev.tools, ...executions] } : prev)
-
-          // Track search tools for UI state (data lives in runTrace)
-          // Note: category is not available yet at this point, so we match by name
-          const searchTools = executions.filter((e) => e.name.toLowerCase().includes('search'))
-          if (searchTools.length > 0) {
-            setSearchExecutions((prev) => [
-              ...prev,
-              ...searchTools.map((tool) => ({
-                id: tool.id,
-                phase: reasoningPhaseRef.current,
-                open: true,
-              }))
-            ])
-          }
-        }
-        else if (parsed.type === 'tool_executing') {
-          // Tool is being executed — queue search panel until reasoning finishes (brief silence)
-          if ((parsed.category === 'search') || (typeof parsed.name === 'string' && parsed.name.toLowerCase().includes('search'))) {
-            pendingOpenSearchRef.current = true
-          }
-          setRunTrace((prev) => {
-            if (!prev) return prev
-            const tools = prev.tools.map((t) => {
-              // Match by ID first (if available), fallback to name for backward compatibility
-              const matchesId = parsed.id && t.id === parsed.id
-              const matchesName = !parsed.id && t.name === parsed.name && (t.status === 'queued' || t.status === 'running')
-              if (matchesId || matchesName) {
-                return {
-                  ...t,
-                  status: 'running' as const,
-                  startedAt: t.startedAt || nowIso(),
-                  category: parsed.category || t.category,
-                  visibility: parsed.visibility || t.visibility,
-                }
-              }
-              return t
-            })
-            return { ...prev, tools }
-          })
-        }
-        else if (parsed.type === 'tool_result') {
-          const succeeded = parsed.result?.success !== false
-          setRunTrace((prev) => {
-            if (!prev) return prev
-            const tools = prev.tools.map((t) => {
-              // Match by ID first (if available), fallback to name for backward compatibility
-              const matchesId = parsed.id && t.id === parsed.id
-              const matchesName = !parsed.id && t.name === parsed.name && (t.status === 'running' || t.status === 'queued')
-              if (matchesId || matchesName) {
-                const endedAt = nowIso()
-                const durationMs = t.startedAt ? (new Date(endedAt).getTime() - new Date(t.startedAt).getTime()) : undefined
-                const newStatus: ToolExecutionTrace['status'] = succeeded ? 'completed' : 'failed'
-                return {
-                  ...t,
-                  status: newStatus,
-                  endedAt,
-                  durationMs,
-                  outputRaw: parsed.result,
-                  links: extractLinks(parsed.result),
-                  outputSummary: Array.isArray(parsed.result?.result?.results) ? `${parsed.result.result.results.length} results` : undefined,
-                  error: succeeded ? null : { message: parsed.result?.error || 'Tool failed' },
-                  category: parsed.category || t.category,
-                  visibility: parsed.visibility || t.visibility,
-                }
-              }
-              return t
-            })
-            return { ...prev, tools }
-          })
-          // Search finished: collapse panel and advance phase immediately for next reasoning session
-          if ((parsed.category === 'search') || (typeof parsed.name === 'string' && parsed.name.toLowerCase().includes('search'))) {
-            setSearchExecutions((prev) => prev.map((search) =>
-              search.id === parsed.id ? { ...search, open: false } : search
-            ))
-            // Advance phase immediately when tool completes, so next reasoning chunk gets new phase
-            const nextPhase = reasoningPhaseRef.current + 1
-            reasoningPhaseRef.current = nextPhase
-            // Open the reasoning block immediately with a spinner for the next reasoning session
-            setReasoningOpenMap((prev) => ({ ...prev, [nextPhase]: true }))
-            setReasoningPhase(nextPhase)
-          }
-        }
-        else if (parsed.type === 'content') {
-          // Regular content
-          appendResponse(parsed.content)
-          // Content implies reasoning has ended for current phase
-          setReasoningOpenMap((prev) => ({ ...prev, [reasoningPhaseRef.current]: false }))
-          pendingOpenSearchRef.current = false
-          if (reasoningSilenceTimerRef.current) window.clearTimeout(reasoningSilenceTimerRef.current)
-          reasoningSilenceTimerRef.current = null
-        }
-        else if (parsed.type === 'done' || parsed.done) {
-          // Stream complete
-          setIsStreaming(false)
-          setRunTrace((prev) => prev ? { ...prev, endedAt: nowIso() } : prev)
-          // Collapse any open reasoning blocks on completion (keep visible)
-          setReasoningOpenMap((prev) => Object.fromEntries(Object.keys(prev).map((k) => [Number(k), false])) as Record<number, boolean>)
-          pendingOpenSearchRef.current = false
-          if (reasoningSilenceTimerRef.current) window.clearTimeout(reasoningSilenceTimerRef.current)
-          reasoningSilenceTimerRef.current = null
-          if (currentStream.current) {
-            api.stopStream(currentStream.current)
-            currentStream.current = null
-          }
-        }
-        else if (parsed.type === 'warning') {
-          setWarning(parsed.message || 'Warning')
-        }
-        else if (parsed.type === 'error') {
-          // Error occurred
-          const msg = parsed.error || parsed.message || 'Error'
-          appendResponse(`\n\n**Error:** ${msg}`)
-          setIsStreaming(false)
-          if (currentStream.current) {
-            api.stopStream(currentStream.current)
-            currentStream.current = null
-          }
-        }
-        else if (parsed.content) {
-          // Legacy format (backward compatibility)
-          appendResponse(parsed.content)
-        }
-      } catch (err) {
-        console.error('stream message parse failed', err)
-      }
-    })
-    es.addEventListener('error', () => {
-      setIsStreaming(false)
-      if (currentStream.current) {
-        api.stopStream(currentStream.current)
-        currentStream.current = null
-      }
-    })
-  }
-
-  const onStop = () => {
-    if (currentStream.current) {
-      api.stopStream(currentStream.current)
-      currentStream.current = null
-    }
-    setIsStreaming(false)
-  }
+  // Clear inspector when user presses Clear
+  React.useEffect(() => { 
+    setInspectorOpen(false)
+    setFocusToolId(undefined) 
+  }, [resetTick])
 
   const onCopy = async () => {
     if (!response) return
@@ -325,7 +72,7 @@ export function ResponsePanel() {
   }, [reasoningTexts, reasoningOpenMap])
 
   const searchesByPhase = useMemo(() => {
-    const map: Record<number, SearchExecution[]> = {}
+    const map: Record<number, typeof searchExecutions> = {}
     searchExecutions.forEach((search) => {
       if (!map[search.phase]) map[search.phase] = []
       map[search.phase].push(search)
@@ -335,11 +82,11 @@ export function ResponsePanel() {
 
   const handleSearchToggle = useCallback((searchId: string, open: boolean) => {
     setSearchExecutions((prev) => prev.map((s) => s.id === searchId ? { ...s, open } : s))
-  }, [])
+  }, [setSearchExecutions])
 
   const handleReasoningToggle = useCallback((phase: number) => {
     setReasoningOpenMap((m) => ({ ...m, [phase]: !m[phase] }))
-  }, [])
+  }, [setReasoningOpenMap])
 
   return (
     <section className="min-h-[calc(100vh-3.5rem)]">
@@ -348,7 +95,7 @@ export function ResponsePanel() {
           <div className="font-medium">Response</div>
           {isStreaming ? (
             <button 
-              onClick={onStop} 
+              onClick={stop} 
               className="text-xs inline-flex items-center gap-1 rounded-md bg-gray-700 hover:bg-gray-800 text-white px-2.5 py-1.5 font-medium shadow-sm"
             >
               <Square className="h-3 w-3" />
@@ -356,7 +103,8 @@ export function ResponsePanel() {
             </button>
           ) : (
             <button 
-              onClick={onGenerate} 
+              id="generate-button"
+              onClick={generate} 
               className="text-xs inline-flex items-center gap-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 font-medium shadow-sm transition-colors"
             >
               <Sparkles className="h-3 w-3" />
@@ -366,7 +114,16 @@ export function ResponsePanel() {
         </div>
         <div className="flex items-center gap-2">
           {isStreaming && <div className="text-xs text-blue-600 animate-pulse">Generating…</div>}
-          <SaveButton />
+          <SaveButton 
+             userPrompt={userPrompt}
+             systemPrompt={systemPrompt}
+             response={response}
+             provider={provider}
+             model={model}
+             parameters={parameters}
+             reasoningEffort={reasoningEffort}
+             variables={variables}
+          />
           <button
             onClick={onCopy}
             disabled={!response}
@@ -461,18 +218,14 @@ export function ResponsePanel() {
   )
 }
 
-function SaveButton() {
-  const response = usePromptStore((s) => s.response)
-  const provider = usePromptStore((s) => s.provider)
-  const model = usePromptStore((s) => s.model)
-  const systemPrompt = usePromptStore((s) => s.systemPrompt)
-  const userPrompt = usePromptStore((s) => s.userPrompt)
-  const parameters = usePromptStore((s) => s.parameters)
-  const reasoningEffort = usePromptStore((s) => s.reasoningEffort)
-  const variables = usePromptStore((s) => s.variables)
+function SaveButton({ 
+  userPrompt, systemPrompt, response, provider, model, parameters, reasoningEffort, variables 
+}: {
+  userPrompt: string, systemPrompt: string, response: string, provider: string, model: string, parameters: any, reasoningEffort: string, variables: any[]
+}) {
   const showToast = useToastStore((s) => s.show)
   const [saving, setSaving] = useState(false)
-  // inline minimal save without coupling to Header state
+  
   const onSave = async () => {
     try {
       setSaving(true)

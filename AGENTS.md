@@ -1,182 +1,245 @@
-# Claude Context - Prompt Engineering Studio
+# AI Agent Context - Prompt Engineering Studio
 
-## ⚠️ IMPORTANT: Greenfield Project Status
-**This is a GREENFIELD APPLICATION with ZERO users.** We are in the initial development phase with no production deployment or user base yet. Therefore:
-- **Keep code simple and clean** - No over-engineering needed
-- **Avoid premature optimization** - Build what works first
-- **No complex error handling yet** - Basic error handling is sufficient
-- **Skip retry logic and fallbacks** - Add these only when we have real users
-- **Minimal testing initially** - Focus on getting features working
-- **No elaborate monitoring/logging** - Simple console logs are fine for now
+## Project Status
+**Greenfield application with zero users.** This is a single-user local development tool. No production deployment, no authentication, no multi-user support.
 
-## Project Overview
-Prompt Engineering Studio is a modern web application for optimizing and evaluating AI prompts across multiple models using OpenRouter's unified API. The platform helps users create better prompts through best practices, evaluation metrics, and A/B testing.
+**Development philosophy:**
+- Keep code simple
+- Avoid over-engineering
+- Basic error handling only
+- No retry logic or fallbacks yet
+- Manual testing first
+- Simple console logs
 
-## Core Purpose
-- **Primary Goal**: Build a tool that helps users write better AI prompts through guidance, testing, and optimization
-- **Target Users**: Developers, prompt engineers, content creators, and businesses using AI
-- **Key Value**: Save time and money by optimizing prompts before production use
+## What This Is
+A web app for testing and optimizing AI prompts across 250+ models via OpenRouter API.
 
-## Technical Stack
+## Tech Stack
+- **Backend**: FastAPI, Python 3.13, PostgreSQL (optional), SQLAlchemy 2.0, uv
+- **Frontend**: React 19, TypeScript, Tailwind CSS v4, Vite, Zustand
+- **APIs**: OpenRouter (AI models), Brave Search (web search), Jina Reader (page reading)
 
-### Backend (Python 3.13+)
-- **Framework**: FastAPI (async, high-performance)
-- **Package Manager**: uv (modern Python package management)
-- **Database**: PostgreSQL 16 with SQLAlchemy 2.0
-- **Authentication**: JWT tokens
-- **API Integration**: OpenRouter for 16 AI models
+## Current Implementation
+
+### Backend (FastAPI)
+**Entry point:** `backend/app/main.py` (62 lines)
+
+**Routers:**
+- `chat/router.py` - Stream chat with SSE, tool calling (refactored into modular components)
+  - `chat/messages.py` - Message building and formatting
+  - `chat/parameters.py` - Parameter validation and parsing
+  - `chat/providers.py` - Provider-specific constraints
+  - `chat/streaming.py` - SSE event streaming helpers
+  - `chat/tools.py` - Tool schemas and execution
+- `models.py` - Model catalog management
+- `optimize.py` - Prompt optimization using meta-prompts
+- `providers.py` - Provider guides and best practices
+- `saves.py` - Snapshot save/load
+
+**Services:**
+- `openrouter.py` - OpenRouter API client (streaming, completion)
+- `tool_executor.py` - Safe tool execution (search_web, read_url)
+- `model_catalog.py` - Model catalog syncing from OpenRouter
+
+**Database models:**
+- `model_config.py` - Model metadata and pricing
+- `provider_content.py` - Best practices and guides
+- `snapshot.py` - Saved prompt sessions
+
+**Config:**
+- `db.py` - Database connection and session management
+- `optimization_prompts.py` - Meta-prompts for optimization
 
 ### Frontend (React 19)
-- **Framework**: React 19 with TypeScript
-- **Styling**: Tailwind CSS v4
-- **UI Components**: Shadcn/ui
-- **State Management**: Zustand
-- **Build Tool**: Vite
-- **Data Fetching**: TanStack Query
+**Components (20+):**
+- `PromptEditor.tsx` - Main prompt editor with variable interpolation
+- `ResponsePanel.tsx` - Response streaming display with tool execution
+- `ParametersPanel.tsx` - Model parameter controls
+- `ModelDetails.tsx` - Model info display
+- `HistoryPanel.tsx` - Prompt history
+- `SettingsContent.tsx` - Settings panel
+- `ToolChips.tsx` - Tool execution status chips
+- `SearchResultsInline.tsx` - Search results display
+- `ReasoningBlock.tsx` - Reasoning display for compatible models
+- `PromptGuidanceModal.tsx` - Provider-specific guidance
+- Others: Header, Logo, ToastContainer, etc.
 
-## Key Features (MVP to Full)
+**Stores (Zustand):**
+- `promptStore.ts` - Prompt state, variables, parameters, history
+- `settingsStore.ts` - App settings
+- `themeStore.ts` - Theme management
+- `toastStore.ts` - Toast notifications
+- `uiStore.ts` - UI state
 
-### MVP Features
-1. User authentication (register/login)
-2. Single prompt execution with OpenRouter
-3. Basic prompt storage and retrieval
-4. Simple model selection (3-5 popular models)
-5. Basic response display
+**Services:**
+- `api.ts` - API client for backend
 
-### Core Features (Post-MVP)
-1. Prompt versioning and history
-2. Variable interpolation in prompts
-3. Model comparison (side-by-side)
-4. Token counting and cost estimation
-5. Prompt templates library
+**Utils:**
+- `modelPresets.ts` - Model-specific parameter presets
+- `tokenEstimator.ts` - Token estimation
+- `theme.ts` - Theme utilities
 
-### Advanced Features
-1. Evaluation metrics and scoring
-2. A/B testing framework
-3. Best practices recommendations
-4. Batch processing
-5. Team collaboration
+### Features Implemented
+1. **Real-time chat streaming** via Server-Sent Events (SSE)
+2. **Variable interpolation** with `{{variable}}` syntax
+3. **Model parameters**: temperature, top-p, top-k, frequency penalty, presence penalty, response format, stop sequences
+4. **Reasoning effort** for compatible models (DeepSeek, OpenAI o1)
+5. **Tool calling**:
+   - `search_web(query, num_results)` - Brave Search API
+   - `read_url(urls, max_chars)` - Jina Reader API
+6. **AI-powered optimization** using meta-prompts
+7. **Provider guides** for Anthropic, OpenAI, Google, xAI, DeepSeek
+8. **Snapshot save/load** for experimentation
+9. **Model catalog** with 250+ models, refresh capability
+10. **Responsive UI** with streaming, tool execution display
 
-## Database Schema (Simplified for MVP)
-```sql
-users (id, email, username, password_hash, openrouter_api_key)
-prompts (id, user_id, title, content, created_at)
-executions (id, prompt_id, model, request, response, tokens, cost)
+### Features NOT Implemented
+- User authentication
+- Multi-user support
+- Evaluation metrics
+- A/B testing
+- Batch processing
+- Cost tracking
+
+## Database Schema
+**Optional** - app works without database for basic chat.
+
+**Tables:**
+- `model_configs` - Model metadata (id, model_id, model_name, provider, context_length, max_completion_tokens, pricing, supports_tools, etc.)
+- `provider_content` - Best practices (id, provider_id, content_type, model_id, title, content, doc_url)
+- `snapshots` - Saved sessions (id, title, kind, provider, model, data, created_at, updated_at)
+
+**No users table** - single-user local app.
+
+## API Endpoints
+```
+GET  /health                              - Health check (DB and API key status)
+GET  /api/chat/stream                     - Stream chat with tool calling
+POST /api/optimize                        - Optimize prompts
+GET  /api/models                          - List models
+GET  /api/models/{model_path}/info        - Get model details
+POST /api/models/refresh                  - Refresh model catalog
+GET  /api/providers                       - List providers
+GET  /api/providers/{id}/guide            - Get optimization guide
+GET  /api/providers/{id}/prompting-guides - Get prompting guides
+POST /api/saves                           - Create snapshot
+GET  /api/saves                           - List snapshots
+GET  /api/saves/{id}                      - Get snapshot
 ```
 
-## API Structure
-```
-/api/auth/register    - User registration
-/api/auth/login       - User login
-/api/prompts          - CRUD for prompts
-/api/execute          - Execute prompt with model
-/api/models           - List available models
-```
+## Development Commands
 
-## Development Approach
-1. **Start Simple**: Get a basic working version quickly - NO over-engineering
-2. **Iterate**: Add features one at a time when actually needed
-3. **Manual Testing First**: Test features manually before writing automated tests
-4. **Build for Zero Users**: We have no users yet, so don't build for scale
-5. **Add Complexity Later**: Only add retry logic, fallbacks, and robust error handling when we have real users
-
-## Important Constraints
-- **OpenRouter API**: Rate limits and pricing constraints
-- **Token Limits**: Different models have different context windows
-- **Response Time**: Keep UI responsive during API calls
-- **Cost Management**: Track and display costs transparently
-
-## File Structure
-```
-prompt_studio/
-├── backend/          # FastAPI application
-├── frontend/         # React application
-├── database/         # Migration scripts
-└── docs/            # Documentation
-```
-
-## Development Workflow
-1. Backend API first (can test with curl/Postman)
-2. Database schema and models
-3. Basic frontend UI
-4. Integration and refinement
-5. Advanced features incrementally
-
-## Common Development Commands (via justfile)
-
-The backend includes a `justfile` with common development commands. **Always use these commands** instead of running tools directly:
-
+**Always use justfile commands from `backend/` directory:**
 ```bash
-# Navigate to backend directory first
-cd backend
-
-# Start/stop server
-just start          # Start FastAPI dev server
-just stop           # Stop running server
-
-# Testing & quality
-just test           # Run tests with coverage
-just lint           # Run ruff linting
-just format         # Format code with black
-just typecheck      # Run mypy type checking
-
-# Database
-just migrate        # Run pending migrations
-just migration "description"  # Create new migration
-just seed           # Seed provider content
-
-# Dependencies
-just sync           # Install/sync dependencies
-
-# Utilities
-just health         # Check API health
-just models         # List available models
+just start      # Start FastAPI dev server
+just stop       # Stop server
+just test       # Run tests
+just lint       # Run linting
+just format     # Format code
+just typecheck  # Type checking
+just migrate    # Run migrations
+just migration "name"  # Create migration
+just seed       # Seed provider content
+just sync       # Install/sync dependencies
+just health     # Check API health
+just models     # List models
 ```
 
-All commands use `uv run` internally, so you never need to manually activate the virtual environment.
+**Frontend (from `frontend/` directory):**
+```bash
+npm run dev     # Start dev server
+npm run build   # Production build
+```
 
-## Success Metrics
-- **Technical**: < 2s page load, < 200ms API response (excluding AI calls)
-- **User**: Successfully execute prompts, save/load prompts, compare models
-- **Business**: Track token usage, optimize costs, improve prompt quality
+## Environment Variables
+**Required:**
+- `OPENROUTER_API_KEY` - OpenRouter API key
 
-## Current Status
-- Project structure created ✅
-- Documentation prepared ✅
-- Ready to start MVP implementation
+**Optional:**
+- `DATABASE_URL` - PostgreSQL connection
+- `OPENROUTER_HTTP_REFERER` - Attribution
+- `OPENROUTER_X_TITLE` - Attribution
+- `BRAVE_API_KEY` - Web search tool
+- `JINA_API_KEY` - Enhanced page reading (200 RPM vs 20 RPM)
 
-## Next Immediate Steps
-1. Set up Python 3.13+ with uv
-2. Create basic FastAPI application
-3. Set up PostgreSQL database
-4. Implement user authentication
-5. Create simple prompt execution endpoint
+## File Locations
+```
+backend/
+├── app/
+│   ├── main.py                 # Entry point (62 lines)
+│   ├── routers/
+│   │   ├── chat/               # Modular chat router
+│   │   │   ├── router.py       # Main chat endpoint
+│   │   │   ├── messages.py     # Message building
+│   │   │   ├── parameters.py   # Parameter parsing
+│   │   │   ├── providers.py    # Provider constraints
+│   │   │   ├── streaming.py    # SSE events
+│   │   │   └── tools.py        # Tool schemas
+│   │   ├── models.py           # Model catalog
+│   │   ├── optimize.py         # Optimization
+│   │   ├── providers.py        # Provider guides
+│   │   └── saves.py            # Snapshots
+│   └── core/
+│       └── config.py           # CORS, env loading
+├── models/
+│   ├── model_config.py         # Model metadata
+│   ├── provider_content.py     # Provider guides
+│   └── snapshot.py             # Saved sessions
+├── services/
+│   ├── openrouter.py           # OpenRouter client
+│   ├── tool_executor.py        # Tool execution
+│   └── model_catalog.py        # Catalog syncing
+├── config/
+│   ├── db.py                   # Database setup
+│   └── optimization_prompts.py # Meta-prompts
+├── scripts/
+│   └── seed_provider_content.py # Seed script
+└── tests/
+    ├── test_chat.py
+    ├── test_health.py
+    └── test_models.py
 
-## Questions/Decisions Needed
-- Hosting platform preference?
-- Budget for OpenRouter API?
-- Target number of users for MVP?
-- Preferred authentication method (email/password, OAuth, both)?
+frontend/src/
+├── components/                 # 20+ React components
+├── store/                      # Zustand stores (5 stores)
+├── services/                   # API client
+├── utils/                      # Utilities
+└── types/                      # TypeScript types
+```
 
-## 🚨 NON-NEGOTIABLE RULES
-1. **USE JUSTFILE COMMANDS** - Always use commands from `backend/justfile` for Python/API development tasks (start, stop, test, lint, format, etc.) instead of running commands directly
-2. **USE UV RUN** - If justfile doesn't have a command you need, use `uv run` instead of activating venv manually (e.g., `uv run uvicorn`, `uv run pytest`)
-3. **NEVER use `git commit .`** - Always add files individually with `git add <specific-file>` to avoid committing unintended files
-4. **ALWAYS USE FEATURE BRANCHES** - Never commit directly to main. Always create a new feature branch (e.g., `git checkout -b feature/description`) before making changes, then merge via pull request.
+## Key Constraints
+- OpenRouter API rate limits and pricing
+- Brave Search API rate limits (varies by plan)
+- Jina Reader API: 20 RPM (free), 200 RPM (with API key)
+- Different models have different context windows and token limits
+- Tool calling limited to 30 iterations max (configurable via `max_tool_calls` param)
 
-## Technical Notes
-- Use async/await for consistency (not for premature optimization)
-- Basic try/catch is sufficient - no complex error recovery needed yet
-- Console.log is fine for now - no logging frameworks needed
-- Environment variables for config is good practice
-- Skip rate limiting until we have actual users to limit
+## Non-Negotiable Rules
+1. **USE JUSTFILE COMMANDS** - Always use `just` commands for backend tasks
+2. **USE UV RUN** - If justfile doesn't have a command, use `uv run`
+3. **NEVER `git commit .`** - Add files individually with `git add <file>`
+4. **ALWAYS CHECK GIT REMOTE** - Run `git remote -v` before GitHub operations
+5. **ALWAYS USE FEATURE BRANCHES** - Never commit directly to main
 
-## Remember
-This is a tool to help people write better prompts. Every feature should serve that goal. Start with the simplest version that provides value, then iterate based on usage and feedback.
+## Coding Philosophy
+1. Avoid try/except unless absolutely needed
+2. No retries or robustness yet - fix bugs as encountered
+3. Code that is easy to read is easy to reason about
+4. Code must be correct - always check docs before updating API calls
 
-## Coding Rules (MVP)
+## Recent Work
+- Backend refactoring (main.py: 960 → 62 lines)
+- Chat router modularization (5 modules)
+- Tool calling (Brave Search + Jina Reader)
+- Prompt optimization with meta-prompts
+- Snapshot save/load
+- Provider guides for 5 providers
+- Reasoning effort control
+- Model catalog with 250+ models
 
-1. We avoid try/except blocks unless they are absolutely needed. We don't need to code overly defensively.
-2. Retries and robustness are not currently a priority. We'll fix bugs as we encounter them and rely on assumptions for the sake of simplicity for now.
-3. Code that is easy to read is easy to reason about.
-4. Code must be correct or it doesn't work. Always check docs before updating API calls or making assumptions about how something works.
+## Next Steps
+- Expand test coverage
+- Add cost tracking
+- Implement evaluation metrics
+- Consider A/B testing framework
+- Add batch processing
