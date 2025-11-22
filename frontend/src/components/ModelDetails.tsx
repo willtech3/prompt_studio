@@ -45,10 +45,10 @@ export function ModelDetails() {
                 <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Supported parameters</div>
                 <div className="flex flex-wrap gap-1.5">
                   {supported.slice(0, 24).map((p: string) => (
-                    <span key={p} className="text-[11px] px-2 py-0.5 rounded-full border border-gray-300 dark:border-white/15">{p}</span>
+                    <span key={p} className="text-xs px-2 py-0.5 rounded-full border border-gray-300 dark:border-white/15">{p}</span>
                   ))}
                   {supported.length > 24 && (
-                    <span className="text-[11px] px-2 py-0.5 rounded-full border border-gray-300 dark:border-white/15">+{supported.length - 24} more</span>
+                    <span className="text-xs px-2 py-0.5 rounded-full border border-gray-300 dark:border-white/15">+{supported.length - 24} more</span>
                   )}
                 </div>
               </div>

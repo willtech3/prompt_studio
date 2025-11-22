@@ -11,8 +11,8 @@ export function UserSettingsScreen() {
   const setFont = useSettingsStore((s) => s.setFont)
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm flex">
-      <div className="mx-auto my-8 w-[min(920px,94vw)] bg-white dark:bg-gray-950 rounded-xl border border-gray-200 dark:border-white/10 shadow-xl flex flex-col">
+    <div className="modal-layer">
+      <div className="modal-surface">
         <div className="h-12 flex items-center justify-between px-4 border-b border-gray-200 dark:border-white/10">
           <div className="font-semibold text-gray-900 dark:text-white">Prompt Studio Settings</div>
           <button onClick={close} className="rounded-md p-2 border border-gray-300 dark:border-white/15 hover:bg-gray-100 dark:hover:bg-white/10 text-gray-900 dark:text-white" aria-label="Close">

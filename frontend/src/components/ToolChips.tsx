@@ -47,7 +47,7 @@ export function ToolChips({ run, onOpen }: Props) {
           <button
             key={name}
             onClick={() => onOpen?.(last?.id)}
-            className={`text-[11px] inline-flex items-center gap-1 px-2 py-1 rounded-md border ${statusColor(last?.status)} hover:opacity-90 transition-opacity`}
+            className={`text-xs inline-flex items-center gap-1 px-2 py-1 rounded-md border ${statusColor(last?.status)} hover:opacity-90 transition-opacity`}
             title={`${name} · ${steps.length} call${steps.length>1?'s':''}`}
             aria-label={`Open ${name} details`}
           >
@@ -59,7 +59,7 @@ export function ToolChips({ run, onOpen }: Props) {
       })}
       <button
         onClick={() => onOpen?.()}
-        className="text-[11px] inline-flex items-center gap-1 px-2 py-1 rounded-md border bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200 border-gray-300/50 hover:opacity-90"
+        className="text-xs inline-flex items-center gap-1 px-2 py-1 rounded-md border bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200 border-gray-300/50 hover:opacity-90"
         title="Open Run details"
         aria-label="Open Run details"
       >
