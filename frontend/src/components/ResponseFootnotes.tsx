@@ -29,7 +29,7 @@ export function ResponseFootnotes({ run }: Props) {
         <div className="mt-2">
           {groups.map(([h, arr], gi) => (
             <div key={gi} className="mb-2">
-              <div className="text-[11px] font-semibold text-gray-700 dark:text-gray-300 mb-1">{h}</div>
+              <div className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{h}</div>
               <ol className="space-y-1 text-xs text-gray-600 dark:text-gray-400">
                 {arr.map((l, i) => (
                   <li key={i} className="flex gap-2">

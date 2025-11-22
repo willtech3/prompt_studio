@@ -21,11 +21,11 @@ export function SettingsSheet() {
   return (
     <div className="fixed inset-0 z-30 lg:hidden" aria-modal="true" role="dialog">
       <button
-        className="absolute inset-0 bg-black/30 backdrop-blur-sm"
+        className="drawer-scrim"
         aria-label="Close settings"
         onClick={close}
       />
-      <div className="absolute right-0 top-0 h-full w-[min(92vw,480px)] bg-white dark:bg-gray-950 border-l border-gray-200 dark:border-white/10 shadow-xl flex flex-col">
+      <div className="sheet-panel right">
         <div className="h-12 flex items-center justify-between px-4 border-b border-gray-200 dark:border-white/10">
           <div className="font-medium">Model & Settings</div>
           <button onClick={close} className="rounded-md p-2 hover:bg-gray-100 dark:hover:bg-white/10" aria-label="Close">

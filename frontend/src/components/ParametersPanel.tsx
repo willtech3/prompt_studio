@@ -56,7 +56,7 @@ export function ParametersPanel() {
         <div className="mb-3 rounded-md border border-blue-300/40 dark:border-blue-300/20 bg-blue-50/60 dark:bg-blue-400/10 p-2">
           <div className="flex items-start justify-between gap-2">
             <div className="text-xs text-blue-950 dark:text-blue-200">{presetExplainer}</div>
-            <button onClick={dismissPresetExplainer} className="text-[11px] rounded border border-blue-300/60 px-1.5 py-0.5 hover:bg-blue-100/60 dark:hover:bg-blue-300/20">Dismiss</button>
+            <button onClick={dismissPresetExplainer} className="text-xs rounded border border-blue-300/60 px-1.5 py-0.5 hover:bg-blue-100/60 dark:hover:bg-blue-300/20">Dismiss</button>
           </div>
         </div>
       )}

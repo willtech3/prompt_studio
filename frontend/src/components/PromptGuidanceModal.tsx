@@ -178,8 +178,8 @@ export function PromptGuidanceModal() {
     : null
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="w-[min(1200px,95vw)] h-[min(900px,90vh)] bg-gray-50 dark:bg-[#1a1d29] rounded-xl border border-gray-200 dark:border-white/10 shadow-xl overflow-hidden flex flex-col">
+    <div className="modal-layer" style={{ padding: '16px' }}>
+      <div className="guidance-surface">
         {/* Header with Tabs */}
         <div className="bg-white dark:bg-gray-950 border-b border-gray-200 dark:border-white/10">
           {/* Title and Close */}
