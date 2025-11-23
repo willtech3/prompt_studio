@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { getModelPreset } from '../utils/modelPresets'
+import { formatNumber } from '../utils/format'
 import { usePromptStore } from '../store/promptStore'
 
 export function ParametersPanel() {
@@ -122,8 +123,8 @@ export function ParametersPanel() {
               onChange={(e) => setMaxTokens(e.target.value === '' ? null : Number(e.target.value))}
             />
             <p className="text-xs text-gray-500 mt-1">
-              {modelInfo?.max_completion_tokens 
-                ? `Using model maximum (${modelInfo.max_completion_tokens.toLocaleString()}). Set lower to reduce cost.`
+              {modelInfo?.max_completion_tokens
+                ? `Using model maximum (${formatNumber(modelInfo.max_completion_tokens)}). Set lower to reduce cost.`
                 : 'Using model maximum tokens. Set lower to reduce cost.'}
             </p>
           </div>
@@ -204,6 +205,6 @@ export function ParametersPanel() {
         {/* analysis/debug-only fields removed from UI: logprobs, top_logprobs, logit_bias */}
 
       </div>
-    </section>
+    </section >
   )
 }

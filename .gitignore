@@ -70,3 +70,4 @@ htmlcov/
 *.bak
 .cache/
 .vercel
+.env.dev
