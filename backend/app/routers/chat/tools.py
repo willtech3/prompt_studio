@@ -40,17 +40,17 @@ def create_search_tool_schema() -> dict[str, Any]:
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "The search query to look up. Be specific and combine related concepts into a single query when possible."
+                        "description": "The search query to look up. Be specific and combine related concepts into a single query when possible.",
                     },
                     "num_results": {
                         "type": "integer",
                         "description": "Number of results to return (1-10). Default is 10 which provides good coverage.",
-                        "default": 10
-                    }
+                        "default": 10,
+                    },
                 },
-                "required": ["query"]
-            }
-        }
+                "required": ["query"],
+            },
+        },
     }
 
 
@@ -79,14 +79,14 @@ def create_read_url_tool_schema() -> dict[str, Any]:
                         "maxItems": 10,
                         "items": {
                             "type": "string",
-                            "description": "A valid HTTP or HTTPS URL to fetch"
+                            "description": "A valid HTTP or HTTPS URL to fetch",
                         },
                         "description": (
                             "List of web page URLs to read. You can pass multiple URLs in one call. "
                             "Recommend selecting 2-5 of the most relevant pages from search results "
                             "to get comprehensive information efficiently. "
                             "Up to 8 URLs will be read per call; any additional URLs will be ignored and reported."
-                        )
+                        ),
                     },
                     "max_chars": {
                         "type": "integer",
@@ -95,12 +95,12 @@ def create_read_url_tool_schema() -> dict[str, Any]:
                             "Content will be intelligently truncated if it exceeds this limit. "
                             "Use higher values (20000-30000) for in-depth articles."
                         ),
-                        "default": 12000
-                    }
+                        "default": 12000,
+                    },
                 },
-                "required": ["urls"]
-            }
-        }
+                "required": ["urls"],
+            },
+        },
     }
 
 
@@ -122,7 +122,7 @@ def build_tool_call_from_delta(builder: dict[str, Any]) -> dict[str, Any] | None
         return {
             "id": builder.get("id") or "call_generated",
             "name": builder["name"],
-            "arguments": builder["arguments"]
+            "arguments": builder["arguments"],
         }
     except json.JSONDecodeError:
         return None

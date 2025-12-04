@@ -4,9 +4,7 @@ import json
 from typing import Any
 
 
-def build_initial_messages(
-    system: str | None, prompt: str | None
-) -> list[dict[str, Any]]:
+def build_initial_messages(system: str | None, prompt: str | None) -> list[dict[str, Any]]:
     """Build initial message array from system and user prompts.
 
     Args:
@@ -55,9 +53,7 @@ def content_to_text(content: Any) -> str:
 
 
 def append_tool_result(
-    messages: list[dict[str, Any]],
-    tool_call_id: str,
-    result: dict[str, Any]
+    messages: list[dict[str, Any]], tool_call_id: str, result: dict[str, Any]
 ) -> list[dict[str, Any]]:
     """Append tool execution result to messages.
 
@@ -72,15 +68,15 @@ def append_tool_result(
     if result.get("success"):
         tool_content = json.dumps(result.get("result", {}))
     else:
-        tool_content = json.dumps(
-            {"error": result.get("error", "Tool execution failed")}
-        )
+        tool_content = json.dumps({"error": result.get("error", "Tool execution failed")})
 
-    messages.append({
-        "role": "tool",
-        "tool_call_id": tool_call_id,
-        "content": tool_content,
-    })
+    messages.append(
+        {
+            "role": "tool",
+            "tool_call_id": tool_call_id,
+            "content": tool_content,
+        }
+    )
 
     return messages
 
@@ -94,10 +90,12 @@ def append_finalization_prompt(messages: list[dict[str, Any]]) -> list[dict[str,
     Returns:
         Updated message list
     """
-    messages.append({
-        "role": "user",
-        "content": "Please use the tool results above to answer my original question.",
-    })
+    messages.append(
+        {
+            "role": "user",
+            "content": "Please use the tool results above to answer my original question.",
+        }
+    )
     return messages
 
 
@@ -122,5 +120,5 @@ def build_assistant_tool_message(tool_calls: list[dict[str, Any]]) -> dict[str, 
                 },
             }
             for tc in tool_calls
-        ]
+        ],
     }

@@ -25,7 +25,7 @@ class SaveRequest(BaseModel):
     """
 
     title: str | None = None
-    kind: str | None = None  
+    kind: str | None = None
     provider: str | None = None
     model: str | None = None
     data: dict | None = None
@@ -50,9 +50,7 @@ class SaveItem(BaseModel):
 
 
 @router.post("", response_model=SaveResponse)
-async def create_save(
-    payload: SaveRequest, session: AsyncSession = Depends(get_session)
-):
+async def create_save(payload: SaveRequest, session: AsyncSession = Depends(get_session)):
     sid = str(uuid.uuid4())
     kind = payload.kind or "state"
     snap = Snapshot(

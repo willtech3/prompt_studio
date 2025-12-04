@@ -1,6 +1,6 @@
-import os
 import hashlib
 import json
+import os
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -20,7 +20,9 @@ _models_cache: dict = {"expires": 0.0, "etag": "", "payload": {"data": []}}
 
 
 @router.get("")
-async def list_models(request: Request, response: Response, session: AsyncSession = Depends(get_session)):
+async def list_models(
+    request: Request, response: Response, session: AsyncSession = Depends(get_session)
+):
     """Return available models from database with simple ETag/TTL caching."""
     now = time.time()
     if now > _models_cache["expires"]:
@@ -35,7 +37,9 @@ async def list_models(request: Request, response: Response, session: AsyncSessio
         )
         payload = {"data": [r.raw or {"id": r.model_id, "name": r.model_name} for r in rows]}
         etag = hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()
-        _models_cache.update({"expires": now + MODELS_TTL_SECONDS, "etag": etag, "payload": payload})
+        _models_cache.update(
+            {"expires": now + MODELS_TTL_SECONDS, "etag": etag, "payload": payload}
+        )
 
     if request.headers.get("if-none-match") == _models_cache["etag"]:
         response.status_code = 304

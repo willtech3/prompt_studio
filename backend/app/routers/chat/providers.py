@@ -44,9 +44,7 @@ def supports_response_format(provider: str) -> bool:
 
 
 def apply_provider_constraints(
-    params: dict[str, Any],
-    model_id: str,
-    has_tools: bool = False
+    params: dict[str, Any], model_id: str, has_tools: bool = False
 ) -> dict[str, Any]:
     """Apply provider-specific parameter constraints.
 
@@ -72,9 +70,7 @@ def apply_provider_constraints(
 
 
 def get_tool_choice_override(
-    tool_choice: str | None,
-    provider: str,
-    tool_names: set[str]
+    tool_choice: str | None, provider: str, tool_names: set[str]
 ) -> str | dict[str, Any]:
     """Get provider-appropriate tool choice value.
 

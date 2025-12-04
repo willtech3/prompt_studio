@@ -1,4 +1,5 @@
 import uuid
+
 from starlette.middleware.base import BaseHTTPMiddleware
 
 
@@ -9,5 +10,3 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         response.headers["x-request-id"] = rid
         return response
-
-
