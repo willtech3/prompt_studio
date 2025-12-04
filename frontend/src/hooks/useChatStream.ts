@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { usePromptStore } from '../store/promptStore'
 import { api } from '../services/api'
-import { RunTrace, ToolExecutionTrace, SearchExecution } from '../types/models'
+import { RunTrace, ToolExecutionTrace, SearchExecution, ToolStatus } from '../types/models'
 import { interpolate } from '../utils/interpolate'
 
 export function useChatStream() {
@@ -208,9 +208,10 @@ export function useChatStream() {
               if (matchesId || matchesName) {
                 const endedAt = nowIso()
                 const durationMs = t.startedAt ? (new Date(endedAt).getTime() - new Date(t.startedAt).getTime()) : undefined
+                const newStatus: ToolStatus = succeeded ? 'completed' : 'failed'
                 return {
                   ...t,
-                  status: succeeded ? 'completed' : 'failed',
+                  status: newStatus,
                   endedAt,
                   durationMs,
                   outputRaw: parsed.result,
