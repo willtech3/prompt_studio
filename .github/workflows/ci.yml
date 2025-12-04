@@ -75,7 +75,7 @@ jobs:
 
       - name: Backend dependencies (locked)
         working-directory: backend
-        run: uv sync --frozen
+        run: uv sync --frozen --extra dev
 
       - name: Run backend tests
         working-directory: backend
