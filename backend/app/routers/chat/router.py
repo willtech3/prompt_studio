@@ -58,9 +58,7 @@ async def get_max_tokens(model: str, session: AsyncSession) -> int | None:
     """Get max tokens from database if available."""
     try:
         await create_all()
-        result = await session.execute(
-            select(ModelConfig).where(ModelConfig.model_id == model)
-        )
+        result = await session.execute(select(ModelConfig).where(ModelConfig.model_id == model))
         model_config = result.scalar_one_or_none()
         if model_config and model_config.max_completion_tokens:
             return model_config.max_completion_tokens
@@ -70,10 +68,7 @@ async def get_max_tokens(model: str, session: AsyncSession) -> int | None:
 
 
 async def stream_until_tool_call(
-    svc: OpenRouterService,
-    model: str,
-    messages: list[dict[str, Any]],
-    params: dict[str, Any]
+    svc: OpenRouterService, model: str, messages: list[dict[str, Any]], params: dict[str, Any]
 ) -> tuple[dict | None, bool, list[str]]:
     """Stream events until a tool call is complete or content finishes.
 
@@ -94,11 +89,14 @@ async def stream_until_tool_call(
 
         elif event_type == "tool_call_delta":
             idx = int(event.get("index") or 0)
-            builder = tool_builders.get(idx, {
-                "id": event.get("id"),
-                "name": None,
-                "arguments": "",
-            })
+            builder = tool_builders.get(
+                idx,
+                {
+                    "id": event.get("id"),
+                    "name": None,
+                    "arguments": "",
+                },
+            )
 
             if event.get("id") and not builder.get("id"):
                 builder["id"] = event.get("id")
@@ -131,7 +129,7 @@ async def finalize_response(
     model: str,
     messages: list[dict[str, Any]],
     params: dict[str, Any],
-    tools: list[dict[str, Any]]
+    tools: list[dict[str, Any]],
 ) -> AsyncGenerator[str]:
     """Finalize response after tool execution."""
     messages = append_finalization_prompt(messages)
@@ -169,7 +167,7 @@ async def execute_with_tools(
     tool_names: set[str],
     tool_choice: str | None,
     max_calls: int,
-    request_id: str | None
+    request_id: str | None,
 ) -> AsyncGenerator[str]:
     """Execute chat with tool calling support."""
     executor = ToolExecutor(request_id=request_id)
@@ -186,9 +184,7 @@ async def execute_with_tools(
         call_params["tools"] = tools
 
         # Set tool choice - trust the model to decide when to use tools
-        call_params["tool_choice"] = get_tool_choice_override(
-            tool_choice, provider, tool_names
-        )
+        call_params["tool_choice"] = get_tool_choice_override(tool_choice, provider, tool_names)
 
         # Apply provider constraints
         call_params = apply_provider_constraints(call_params, model, has_tools=True)
@@ -225,16 +221,14 @@ async def execute_with_tools(
         meta = get_tool_metadata(func_name)
 
         yield stream_tool_executing_event(
-            completed_call["id"], func_name,
-            meta["category"], meta["visibility"]
+            completed_call["id"], func_name, meta["category"], meta["visibility"]
         )
 
         # Execute tool directly - trust model to not spam identical queries
         result = await executor.execute(func_name, func_args)
 
         yield stream_tool_result_event(
-            completed_call["id"], func_name, result,
-            meta["category"], meta["visibility"]
+            completed_call["id"], func_name, result, meta["category"], meta["visibility"]
         )
 
         # Add tool result to messages
@@ -271,6 +265,7 @@ async def stream_chat(
     session: AsyncSession = Depends(get_session),
 ):
     """Stream chat completion with optional tool calling."""
+
     async def generate():
         # Check API key
         if not os.getenv("OPENROUTER_API_KEY"):
@@ -295,9 +290,13 @@ async def stream_chat(
 
         # Build parameters
         params = build_chat_params(
-            temperature, top_p, effective_max_tokens,
-            top_k, frequency_penalty, presence_penalty,
-            reasoning_effort
+            temperature,
+            top_p,
+            effective_max_tokens,
+            top_k,
+            frequency_penalty,
+            presence_penalty,
+            reasoning_effort,
         )
 
         # Add response format

@@ -1,14 +1,14 @@
 import contextlib
 
+from brotli_asgi import BrotliMiddleware
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import ORJSONResponse
-from brotli_asgi import BrotliMiddleware
-from .middleware.request_id import RequestIdMiddleware
 
 from config.db import create_all, init_engine
 
 from .core.config import get_cors_origins, load_env_from_project_root
+from .middleware.request_id import RequestIdMiddleware
 from .routers import (
     chat as chat_routes,
 )
@@ -27,7 +27,9 @@ from .routers import (
 
 load_env_from_project_root()
 
-app = FastAPI(title="Prompt Engineering Studio API", version="0.1.0", default_response_class=ORJSONResponse)
+app = FastAPI(
+    title="Prompt Engineering Studio API", version="0.1.0", default_response_class=ORJSONResponse
+)
 
 # Response compression
 app.add_middleware(BrotliMiddleware)
@@ -59,6 +61,7 @@ app.include_router(optimize_routes.router)
 @app.get("/health")
 async def health():
     import os
+
     # also report DB availability
     db_ready = init_engine() is not None
     brave_key_set = bool(os.getenv("BRAVE_API_KEY"))

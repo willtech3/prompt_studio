@@ -47,10 +47,7 @@ def build_chat_params(
     return params
 
 
-def parse_response_format(
-    response_format: str | None,
-    model_id: str
-) -> dict[str, Any] | None:
+def parse_response_format(response_format: str | None, model_id: str) -> dict[str, Any] | None:
     """Parse and validate response format parameter.
 
     Args:
@@ -112,7 +109,7 @@ def parse_stop_sequences(stop: str | None) -> list[str] | None:
 
 
 def parse_tool_schemas(
-    tool_schemas_raw: str | None
+    tool_schemas_raw: str | None,
 ) -> tuple[list[dict[str, Any]] | None, set[str]]:
     """Parse and validate tool schemas from JSON string.
 
@@ -142,9 +139,9 @@ def parse_tool_schemas(
         return parsed_schemas, tool_names
 
     except json.JSONDecodeError:
-        raise ValueError("Invalid tools JSON")
+        raise ValueError("Invalid tools JSON") from None
     except Exception as e:
-        raise ValueError(f"Error parsing tools: {str(e)}")
+        raise ValueError(f"Error parsing tools: {str(e)}") from e
 
 
 def merge_params(base: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:

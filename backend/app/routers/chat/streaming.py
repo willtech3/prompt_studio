@@ -53,10 +53,7 @@ def stream_tool_calls_event(calls: list[dict[str, Any]]) -> str:
 
 
 def stream_tool_executing_event(
-    tool_id: str,
-    name: str,
-    category: str = "other",
-    visibility: str = "secondary"
+    tool_id: str, name: str, category: str = "other", visibility: str = "secondary"
 ) -> str:
     """Format tool executing event.
 
@@ -69,13 +66,15 @@ def stream_tool_executing_event(
     Returns:
         SSE-formatted tool executing event
     """
-    return format_sse_event({
-        "type": "tool_executing",
-        "id": tool_id,
-        "name": name,
-        "category": category,
-        "visibility": visibility
-    })
+    return format_sse_event(
+        {
+            "type": "tool_executing",
+            "id": tool_id,
+            "name": name,
+            "category": category,
+            "visibility": visibility,
+        }
+    )
 
 
 def stream_tool_result_event(
@@ -83,7 +82,7 @@ def stream_tool_result_event(
     name: str,
     result: dict[str, Any],
     category: str = "other",
-    visibility: str = "secondary"
+    visibility: str = "secondary",
 ) -> str:
     """Format tool result event.
 
@@ -97,14 +96,16 @@ def stream_tool_result_event(
     Returns:
         SSE-formatted tool result event
     """
-    return format_sse_event({
-        "type": "tool_result",
-        "id": tool_id,
-        "name": name,
-        "result": result,
-        "category": category,
-        "visibility": visibility
-    })
+    return format_sse_event(
+        {
+            "type": "tool_result",
+            "id": tool_id,
+            "name": name,
+            "result": result,
+            "category": category,
+            "visibility": visibility,
+        }
+    )
 
 
 def stream_error_event(error: str) -> str:
